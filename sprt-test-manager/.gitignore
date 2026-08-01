@@ -1,0 +1,28 @@
+# Cargo
+/target/
+Cargo.lock
+**/*.rs.bk
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+
+# Application
+sprt_tests.db
+compiled_engines/
+*.log
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.dll

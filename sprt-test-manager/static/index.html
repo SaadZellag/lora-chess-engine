@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPRT Test Manager</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div id="app">
+        <div class="container">
+            <header>
+                <h1>♟️ SPRT Test Manager</h1>
+            </header>
+
+            <nav class="tabs">
+                <button class="tab-btn" @click="currentTab = 'create'" :class="{ active: currentTab === 'create' }">
+                    Create Test
+                </button>
+                <button class="tab-btn" @click="currentTab = 'running'" :class="{ active: currentTab === 'running' }">
+                    Running Tests
+                </button>
+                <button class="tab-btn" @click="currentTab = 'settings'" :class="{ active: currentTab === 'settings' }">
+                    Settings
+                </button>
+            </nav>
+
+            <!-- Create Test Tab -->
+            <div v-show="currentTab === 'create'" class="tab-content">
+                <div class="form-section">
+                    <h2>Create New SPRT Test</h2>
+                    
+                    <div class="form-group">
+                        <label>Engine 1</label>
+                        <div class="engine-config">
+                            <input v-model="form.engine1_name" placeholder="Engine 1 Name" class="input">
+                            <input v-model="form.engine1_ref" placeholder="Branch or commit hash" class="input">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Engine 2</label>
+                        <div class="engine-config">
+                            <input v-model="form.engine2_name" placeholder="Engine 2 Name" class="input">
+                            <input v-model="form.engine2_ref" placeholder="Branch or commit hash" class="input">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Compiler Environment Variables (JSON)</label>
+                        <textarea v-model="form.env_vars_str" placeholder='{"NNUE_PATH": "/path/to/nnue"}' class="textarea"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Fastchess Parameters (JSON)</label>
+                        <textarea v-model="form.fastchess_params_str" placeholder='{"rounds": 100, "concurrency": 4, "repeat": true}' class="textarea"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Discord Webhook (Optional)</label>
+                        <input v-model="form.discord_webhook" placeholder="https://discordapp.com/api/webhooks/..." class="input">
+                    </div>
+
+                    <button @click="createTest" class="btn btn-primary">Start Test</button>
+                    <div v-if="createError" class="error-message">{{ createError }}</div>
+                </div>
+            </div>
+
+            <!-- Running Tests Tab -->
+            <div v-show="currentTab === 'running'" class="tab-content">
+                <h2>Active Tests</h2>
+                <div class="tests-grid">
+                    <div v-for="test in tests" :key="test.id" class="test-card">
+                        <div class="test-header">
+                            <h3>{{ test.engine1_name }} vs {{ test.engine2_name }}</h3>
+                            <span class="status-badge" :class="test.status.toLowerCase()">{{ test.status }}</span>
+                        </div>
+                        
+                        <div class="test-info">
+                            <p><strong>Refs:</strong> {{ test.engine1_ref }} / {{ test.engine2_ref }}</p>
+                            <p v-if="test.games_total > 0"><strong>Progress:</strong> {{ test.games_played }} / {{ test.games_total }} games</p>
+                            <p v-if="test.created_at"><strong>Created:</strong> {{ formatDate(test.created_at) }}</p>
+                            <p v-if="test.started_at"><strong>Started:</strong> {{ formatDate(test.started_at) }}</p>
+                        </div>
+
+                        <div class="test-actions">
+                            <button v-if="test.status === 'running'" @click="pauseTest(test.id)" class="btn btn-secondary">Pause</button>
+                            <button v-if="test.status === 'paused'" @click="resumeTest(test.id)" class="btn btn-secondary">Resume</button>
+                            <button @click="viewLogs(test.id)" class="btn btn-secondary">Logs</button>
+                            <button @click="deleteTest(test.id)" class="btn btn-danger">Discard</button>
+                        </div>
+                    </div>
+
+                    <div v-if="tests.length === 0" class="empty-state">
+                        No tests running. Create one to get started!
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div v-show="currentTab === 'settings'" class="tab-content">
+                <div class="form-section">
+                    <h2>Settings</h2>
+                    
+                    <div class="form-group">
+                        <label>Compiled Engines Path</label>
+                        <input v-model="settings.compiled_engines_path" class="input">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Lora Repository Path</label>
+                        <input v-model="settings.lora_repo_path" class="input">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Fastchess Path</label>
+                        <input v-model="settings.fastchess_path" class="input">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Default Compiler Environment Variables (JSON)</label>
+                        <textarea v-model="settings.default_env_vars_str" class="textarea"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Default Fastchess Parameters (JSON)</label>
+                        <textarea v-model="settings.default_fastchess_params_str" class="textarea"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Default Discord Webhook (Optional)</label>
+                        <input v-model="settings.default_discord_webhook" class="input">
+                    </div>
+
+                    <button @click="saveSettings" class="btn btn-primary">Save Settings</button>
+                    <div v-if="settingsError" class="error-message">{{ settingsError }}</div>
+                    <div v-if="settingsSuccess" class="success-message">Settings saved!</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Logs Modal -->
+        <div v-if="showLogsModal" class="modal" @click="showLogsModal = false">
+            <div class="modal-content" @click.stop>
+                <div class="modal-header">
+                    <h3>Test Logs</h3>
+                    <button @click="showLogsModal = false" class="btn-close">×</button>
+                </div>
+                <div class="logs-container">
+                    <div v-for="log in currentLogs" :key="log.id" class="log-line" :class="log.level.toLowerCase()">
+                        <span class="log-time">{{ log.timestamp }}</span>
+                        <span class="log-level">[{{ log.level }}]</span>
+                        <span class="log-message">{{ log.message }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.js"></script>
+    <script src="/app.js"></script>
+</body>
+</html>
