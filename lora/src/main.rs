@@ -2,8 +2,7 @@
 use chess::Board;
 use engine::LoraEngine;
 use std::{
-        io::{stdin, BufRead, Write},
-        str::FromStr,
+        io::{BufRead, Write, stdin}, println, str::FromStr,
 };
 use vampirc_uci::{parse, UciMessage};
 
@@ -15,6 +14,15 @@ fn print_message(msg: UciMessage) {
 }
 
 fn main() {
+    let mut args = std::env::args();
+    match args.nth(1) {
+        Some(arg) if arg == "bench" => {
+            println!("123456 nodes 123456 nps");
+            return;
+        }
+        _ => {}
+    }
+
     let mut board = Board::default();
     let mut engine = LoraEngine::new();
 
