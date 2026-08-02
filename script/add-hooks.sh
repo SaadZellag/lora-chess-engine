@@ -21,4 +21,14 @@ else
     exit 1
 fi
 
+# Install prepare-commit-msg hook
+if [ -f "$SCRIPT_DIR/prepare-commit-msg" ]; then
+    ln -sf ../../script/prepare-commit-msg "$GIT_HOOKS_DIR/prepare-commit-msg"
+    chmod +x "$GIT_HOOKS_DIR/prepare-commit-msg"
+    echo "✓ Installed prepare-commit-msg hook"
+else
+    echo "✗ Error: $SCRIPT_DIR/prepare-commit-msg not found"
+    exit 1
+fi
+
 echo "Git hooks installation complete!"

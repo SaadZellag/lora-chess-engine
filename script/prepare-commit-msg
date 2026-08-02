@@ -1,0 +1,31 @@
+#!/bin/bash
+
+# Prepare commit message hook: Build and benchmark, append to message
+
+echo "Running pre-commit checks..."
+
+# Build the engine
+echo "Building engine..."
+make build
+
+# Run benchmark
+echo "Running benchmark..."
+BENCH_OUTPUT=$(./engine bench)
+
+# Parse output: "123456 nodes 123456 nps" -> extract nodes
+NODES=$(echo "$BENCH_OUTPUT" | grep -oP '^\d+(?= nodes)')
+
+if [ -z "$NODES" ]; then
+    echo "ERROR: Could not parse benchmark output: $BENCH_OUTPUT"
+    exit 1
+fi
+
+BENCH_RESULT="BENCH $NODES"
+echo "$BENCH_RESULT"
+
+# Append bench result to commit message file
+COMMIT_MSG_FILE="$1"
+if [ -f "$COMMIT_MSG_FILE" ]; then
+    echo "" >> "$COMMIT_MSG_FILE"
+    echo "$BENCH_RESULT" >> "$COMMIT_MSG_FILE"
+fi

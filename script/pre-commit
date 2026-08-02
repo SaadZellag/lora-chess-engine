@@ -1,24 +1,7 @@
 #!/bin/bash
 
-# Pre-commit hook: Build and benchmark
+# Pre-commit hook: Build the engine
 set -e
 
-echo "Running pre-commit checks..."
-
-# Build the engine
 echo "Building engine..."
 make build
-
-# Run benchmark
-echo "Running benchmark..."
-BENCH_OUTPUT=$(./engine bench)
-
-# Parse output: "123456 nodes 123456 nps" -> extract nodes
-NODES=$(echo "$BENCH_OUTPUT" | grep -oP '^\d+(?= nodes)')
-
-if [ -z "$NODES" ]; then
-    echo "ERROR: Could not parse benchmark output: $BENCH_OUTPUT"
-    exit 1
-fi
-
-echo "BENCH [$NODES]"
