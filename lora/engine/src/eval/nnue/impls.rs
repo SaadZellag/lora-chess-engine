@@ -2,8 +2,8 @@ use std::ops::{Index, IndexMut};
 use chess::{Board, ChessMove, Color, Piece, Square};
 use crate::{
     Eval, eval::nnue::{
-        EVALUATOR, L1, NNUE, NNUEAccumulator, activations::CRELU, features, layer::{FeatureLayer, Layer}, vectors::{fast_vadd, fast_vsub},
-    }, util::PositionGenerator,
+        EVALUATOR, L1, NNUE, NNUEAccumulator, activations::CRELU, features, vectors::{fast_vadd, fast_vsub},
+    },
 };
 
 impl Index<Color> for NNUEAccumulator {
@@ -65,8 +65,8 @@ impl NNUEAccumulator {
         let mut result = Self { v: [[0; L1]; 2] };
 
         for i in 0..L1 {
-            result[Color::White][i] = EVALUATOR.ft.bias[i].into();
-            result[Color::Black][i] = EVALUATOR.ft.bias[i].into();
+            result[Color::White][i] = EVALUATOR.ft.bias[i];
+            result[Color::Black][i] = EVALUATOR.ft.bias[i];
         }
 
         result
@@ -98,7 +98,7 @@ impl NNUEAccumulator {
             return Self::new(final_board);
         }
 
-        let mut result = self.clone();
+        let mut result = *self;
 
         let white_king = initial_board.king_square(Color::White);
         let black_king = initial_board.king_square(Color::Black);

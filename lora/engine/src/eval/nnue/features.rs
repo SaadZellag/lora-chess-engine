@@ -2,7 +2,6 @@ use chess::Piece;
 use chess::{Board, Color, Square};
 use std::iter;
 
-use crate::eval::nnue::NUM_FEATURES;
 
 const HALFKP_PIECES: [Piece; 5] = [
     Piece::Pawn,

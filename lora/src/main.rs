@@ -33,10 +33,7 @@ fn print_options() {
 fn main() {
     let mut args = std::env::args();
     if let Some(arg) = args.nth(1) {
-        match arg.as_str() {
-            "bench" => return bench::bench(),
-            _ => {}
-        }
+        if arg.as_str() == "bench" { return bench::bench() }
     }
 
     let mut board = Board::default();
@@ -89,7 +86,7 @@ fn main() {
                     }
                 }
 
-                UciMessage::SetOption { name, value } => match name.to_lowercase().as_ref() {
+                UciMessage::SetOption { name, value: _ } => match name.to_lowercase().as_ref() {
                     "hash" => {
                         // TODO
                     }

@@ -1,7 +1,3 @@
-use std::{
-    collections::{HashMap, HashSet},
-    iter::FromIterator,
-};
 
 use chess::{ChessMove};
 use crate::search::position::Position;
@@ -108,7 +104,7 @@ impl TranspositionTable {
         // original_hash as usize % self.size
         // ((original_hash as u32 as u64 * self.size as u64) >> u32::BITS) as usize
         // ((original_hash as u128 * 18446744073709551557) as usize) % self.size
-        (original_hash as u128 * self.size as u128 >> 64) as usize
+        ((original_hash as u128 * self.size as u128) >> 64) as usize
     }
 }
 

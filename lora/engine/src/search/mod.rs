@@ -15,7 +15,8 @@ impl LoraEngine {
         }
         
         // Get the best move based on the highest piece value captured
-        let best_move = moves.into_iter().max_by_key(|mv| {
+        
+        moves.into_iter().max_by_key(|mv| {
             let captured_piece = board.piece_on(mv.get_dest());
             match captured_piece {
                 None => 0,
@@ -26,7 +27,6 @@ impl LoraEngine {
                 Some(Piece::Queen) => 9,
                 Some(Piece::King) => 1000,
             }
-        });
-        best_move
+        })
     }
 }

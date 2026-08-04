@@ -5,7 +5,7 @@ mod util;
 
 pub use eval::Eval;
 
-use chess::{Board, ChessMove, MoveGen, Piece};
+use chess::ChessMove;
 
 use crate::tt::TranspositionTable;
 
@@ -52,5 +52,11 @@ impl LoraEngine {
                 transposition_table: TranspositionTable::new(1024),
             },
         }
+    }
+}
+
+impl Default for LoraEngine {
+    fn default() -> Self {
+        Self::new()
     }
 }

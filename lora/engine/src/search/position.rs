@@ -49,7 +49,7 @@ impl Position {
     pub fn null_move(&self) -> Option<Self> {
         Some(Self {
             board: self.board.null_move()?,
-            acc: self.acc.clone(),
+            acc: self.acc,
             ply: self.ply + 1,
         })
     }

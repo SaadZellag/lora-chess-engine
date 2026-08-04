@@ -51,9 +51,9 @@ impl Eval {
             Eval::MateIn(_) | Eval::MatedIn(_) => self,
             Eval::CentiPawn(x) => {
                 if Self::BEST_EVAL.value() - x < MAX_DEPTH as i32 {
-                    return Eval::MateIn((Self::BEST_EVAL.value() - x + 1) as u8);
+                    Eval::MateIn((Self::BEST_EVAL.value() - x + 1) as u8)
                 } else if x - Self::WORST_EVAL.value() < MAX_DEPTH as i32 {
-                    return Eval::MatedIn((x - Self::WORST_EVAL.value() + 1) as u8);
+                    Eval::MatedIn((x - Self::WORST_EVAL.value() + 1) as u8)
                 } else {
                     self
                 }

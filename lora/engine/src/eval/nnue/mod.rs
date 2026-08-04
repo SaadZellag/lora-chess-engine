@@ -4,7 +4,6 @@ mod vectors;
 mod impls;
 mod activations;
 
-pub use impls::*;
 
 // https://github.com/glinscott/nnue-pytorch/blob/master/docs/nnue.md
 

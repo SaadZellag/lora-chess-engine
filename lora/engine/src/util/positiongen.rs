@@ -38,8 +38,7 @@ const POSITIONS: &[&str] = &[
 fn get_testing_boards() -> VecDeque<Board> {
     POSITIONS
         .iter()
-        .map(|p| Board::from_str(p))
-        .flatten()
+        .flat_map(|p| Board::from_str(p))
         .collect()
 }
 
@@ -52,7 +51,7 @@ pub struct PositionGenerator {
 
 impl PositionGenerator {
     pub fn new() -> Self {
-        let mut boards = VecDeque::from(get_testing_boards());
+        let mut boards = get_testing_boards();
         let current_board = boards.pop_front().unwrap();
         let current_gen = MoveGen::new_legal(&current_board);
         Self {
