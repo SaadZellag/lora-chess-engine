@@ -41,29 +41,31 @@ fn flip(square: Square) -> Square {
 
 #[cfg(test)]
 mod tests {
-    use crate::eval::nnue::{NUM_FEATURES, features::{HALFKP_PIECES, black_feature_index, white_feature_index}};
+    use crate::eval::nnue::{
+        NUM_FEATURES,
+        features::{HALFKP_PIECES, black_feature_index, white_feature_index},
+    };
 
-#[test]
-fn test_halfkp() {
-    use chess::{ALL_COLORS, ALL_SQUARES};
-    let mut white_result = [0; NUM_FEATURES];
-    let mut black_result = [0; NUM_FEATURES];
+    #[test]
+    fn test_halfkp() {
+        use chess::{ALL_COLORS, ALL_SQUARES};
+        let mut white_result = [0; NUM_FEATURES];
+        let mut black_result = [0; NUM_FEATURES];
 
-    for king_sq in ALL_SQUARES {
-        for square in ALL_SQUARES {
-            for piece in HALFKP_PIECES {
-                for color in ALL_COLORS {
-                    let index = white_feature_index(king_sq, square, piece, color);
-                    white_result[index] += 1;
-                    let index = black_feature_index(king_sq, square, piece, color);
-                    black_result[index] += 1;
+        for king_sq in ALL_SQUARES {
+            for square in ALL_SQUARES {
+                for piece in HALFKP_PIECES {
+                    for color in ALL_COLORS {
+                        let index = white_feature_index(king_sq, square, piece, color);
+                        white_result[index] += 1;
+                        let index = black_feature_index(king_sq, square, piece, color);
+                        black_result[index] += 1;
+                    }
                 }
             }
         }
+
+        assert_eq!(white_result, [1; NUM_FEATURES]);
+        assert_eq!(black_result, [1; NUM_FEATURES]);
     }
-
-    assert_eq!(white_result, [1; NUM_FEATURES]);
-    assert_eq!(black_result, [1; NUM_FEATURES]);
 }
-}
-

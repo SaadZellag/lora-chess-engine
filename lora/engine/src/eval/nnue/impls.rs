@@ -164,7 +164,7 @@ impl NNUEAccumulator {
 #[cfg(test)]
 mod tests {
     use crate::{eval::nnue::NNUEAccumulator, util::PositionGenerator};
-    
+
     #[test]
     fn test_acc_update() {
         use chess::MoveGen;

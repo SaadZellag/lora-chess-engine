@@ -43,7 +43,7 @@ fmt:
 # Clippy linting and fixes
 clippy:
 	@echo "Running cargo clippy fix..."
-	@cd $(WORKSPACE_DIR) && $(CARGO) clippy fix --workspace
+	@cd $(WORKSPACE_DIR) && $(CARGO) clippy --fix --workspace
 
 # Combined lint and format
 lint: clippy fmt
