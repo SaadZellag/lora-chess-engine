@@ -15,13 +15,13 @@ RUSTFLAGS = -C target-cpu=native
 BINARY = $(WORKSPACE_DIR)/target/release/lora
 FINAL_BINARY = $(EXE)
 
-.PHONY: all build clean bench help
+.PHONY: all build cargo-build copy-binary clean bench fmt clippy lint help
 
 all: build
 
-build: $(FINAL_BINARY)
+build: copy-binary
 
-$(FINAL_BINARY): 
+cargo-build:
 	@echo "Building LORA Chess Engine (release, native CPU)..."
 	@cd $(WORKSPACE_DIR) && \
 	if [ -n "$(EVALFILE)" ]; then \
@@ -30,8 +30,24 @@ $(FINAL_BINARY):
 	else \
 		RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGO_FLAGS); \
 	fi
+
+copy-binary: cargo-build
 	@cp $(BINARY) $(FINAL_BINARY)
 	@echo "Built: $(FINAL_BINARY)"
+
+# Code formatting
+fmt:
+	@echo "Running cargo fmt..."
+	@cd $(WORKSPACE_DIR) && $(CARGO) fmt
+
+# Clippy linting and fixes
+clippy:
+	@echo "Running cargo clippy fix..."
+	@cd $(WORKSPACE_DIR) && $(CARGO) clippy fix --workspace
+
+# Combined lint and format
+lint: clippy fmt
+	@echo "Lint and format complete"
 
 # Benchmark target - runs the engine bench command
 bench: $(FINAL_BINARY)
@@ -55,6 +71,9 @@ help:
 	@echo "  all      - Build the engine (default)"
 	@echo "  build    - Build the engine"
 	@echo "  bench    - Build and run benchmark"
+	@echo "  fmt      - Format code with cargo fmt"
+	@echo "  clippy   - Run clippy linting with auto-fix"
+	@echo "  lint     - Run clippy and fmt together"
 	@echo "  clean    - Remove build artifacts"
 	@echo "  help     - Display this help message"
 	@echo ""

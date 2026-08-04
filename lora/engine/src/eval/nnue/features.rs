@@ -35,6 +35,14 @@ pub fn features(board: &Board) -> impl Iterator<Item = (usize, usize)> + '_ {
         })
 }
 
+fn flip(square: Square) -> Square {
+    unsafe { Square::new(square.to_int() ^ 56) }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::eval::nnue::{NUM_FEATURES, features::{HALFKP_PIECES, black_feature_index, white_feature_index}};
+
 #[test]
 fn test_halfkp() {
     use chess::{ALL_COLORS, ALL_SQUARES};
@@ -57,7 +65,5 @@ fn test_halfkp() {
     assert_eq!(white_result, [1; NUM_FEATURES]);
     assert_eq!(black_result, [1; NUM_FEATURES]);
 }
-
-fn flip(square: Square) -> Square {
-    unsafe { Square::new(square.to_int() ^ 56) }
 }
+

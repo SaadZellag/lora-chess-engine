@@ -161,23 +161,28 @@ impl NNUEAccumulator {
     }
 }
 
-#[test]
-fn test_acc_update() {
-    use chess::MoveGen;
-    for board in PositionGenerator::new().take(1000) {
-        let acc = NNUEAccumulator::new(&board);
+#[cfg(test)]
+mod tests {
+    use crate::{eval::nnue::NNUEAccumulator, util::PositionGenerator};
+    
+    #[test]
+    fn test_acc_update() {
+        use chess::MoveGen;
+        for board in PositionGenerator::new().take(1000) {
+            let acc = NNUEAccumulator::new(&board);
 
-        for mv in MoveGen::new_legal(&board) {
-            let new_board = board.make_move_new(mv);
-            let new_acc = acc.update(&board, &new_board, mv);
+            for mv in MoveGen::new_legal(&board) {
+                let new_board = board.make_move_new(mv);
+                let new_acc = acc.update(&board, &new_board, mv);
 
-            assert_eq!(
-                new_acc,
-                NNUEAccumulator::new(&new_board),
-                "{} with {} played doesn't match",
-                board,
-                mv
-            );
+                assert_eq!(
+                    new_acc,
+                    NNUEAccumulator::new(&new_board),
+                    "{} with {} played doesn't match",
+                    board,
+                    mv
+                );
+            }
         }
     }
 }

@@ -106,46 +106,51 @@ impl PartialEq for Eval {
     }
 }
 
-#[test]
-fn cmp_evals() {
-    // To make sure that evals work properly
-    assert!(Eval::MAX > Eval::BEST_EVAL);
-    assert!(Eval::WORST_EVAL < Eval::NEUTRAL);
-    assert!(Eval::NEUTRAL < Eval::BEST_EVAL);
-    assert!(Eval::BEST_EVAL > Eval::WORST_EVAL);
-    assert!(Eval::BEST_EVAL.max(Eval::NEUTRAL) == Eval::BEST_EVAL);
-    assert!(Eval::NEUTRAL.max(Eval::BEST_EVAL) == Eval::BEST_EVAL);
-    assert!(Eval::MIN < Eval::WORST_EVAL);
-}
+#[cfg(test)]
+mod tests {
+    use crate::Eval;
 
-#[test]
-fn test_normalize() {
-    let evals = [
-        Eval::BEST_EVAL,
-        Eval::WORST_EVAL,
-        Eval::MateIn(10),
-        Eval::MatedIn(10),
-        Eval::CentiPawn(1200),
-        Eval::CentiPawn(-1000),
-        Eval::CentiPawn(10),
-        Eval::CentiPawn(-25),
-    ];
+    #[test]
+    fn cmp_evals() {
+        // To make sure that evals work properly
+        assert!(Eval::MAX > Eval::BEST_EVAL);
+        assert!(Eval::WORST_EVAL < Eval::NEUTRAL);
+        assert!(Eval::NEUTRAL < Eval::BEST_EVAL);
+        assert!(Eval::BEST_EVAL > Eval::WORST_EVAL);
+        assert!(Eval::BEST_EVAL.max(Eval::NEUTRAL) == Eval::BEST_EVAL);
+        assert!(Eval::NEUTRAL.max(Eval::BEST_EVAL) == Eval::BEST_EVAL);
+        assert!(Eval::MIN < Eval::WORST_EVAL);
+    }
 
-    for eval in evals {
-        assert_eq!(
-            (eval + Eval::NEUTRAL).normalize(),
-            eval,
-            "{:?} normalized gives {:?}",
-            eval,
-            (eval + Eval::NEUTRAL).normalize()
-        );
+    #[test]
+    fn test_normalize() {
+        let evals = [
+            Eval::BEST_EVAL,
+            Eval::WORST_EVAL,
+            Eval::MateIn(10),
+            Eval::MatedIn(10),
+            Eval::CentiPawn(1200),
+            Eval::CentiPawn(-1000),
+            Eval::CentiPawn(10),
+            Eval::CentiPawn(-25),
+        ];
 
-        assert_eq!(
-            (eval + Eval::UNIT).normalize(),
-            eval + Eval::UNIT,
-            "{:?} + Eval::UNIT normalized gives {:?}",
-            eval,
-            (eval + Eval::UNIT).normalize()
-        );
+        for eval in evals {
+            assert_eq!(
+                (eval + Eval::NEUTRAL).normalize(),
+                eval,
+                "{:?} normalized gives {:?}",
+                eval,
+                (eval + Eval::NEUTRAL).normalize()
+            );
+
+            assert_eq!(
+                (eval + Eval::UNIT).normalize(),
+                eval + Eval::UNIT,
+                "{:?} + Eval::UNIT normalized gives {:?}",
+                eval,
+                (eval + Eval::UNIT).normalize()
+            );
+        }
     }
 }
