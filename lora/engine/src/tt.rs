@@ -1,6 +1,5 @@
-
-use chess::{ChessMove};
 use crate::search::position::Position;
+use chess::ChessMove;
 
 use crate::Eval;
 
@@ -72,11 +71,9 @@ impl TranspositionTable {
         replace |= entry.depth >= old_entry.depth;
 
         if replace {
-            
             if old_entry.flag == EntryType::Invalid {
                 self.num_valid_entries += 1;
             }
-            
 
             entry.eval = entry.eval.sub_ply(pos.ply());
             self.table[index] = entry;

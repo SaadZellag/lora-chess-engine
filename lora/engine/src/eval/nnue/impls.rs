@@ -1,10 +1,14 @@
-use std::ops::{Index, IndexMut};
-use chess::{Board, ChessMove, Color, Piece, Square};
 use crate::{
-    Eval, eval::nnue::{
-        EVALUATOR, L1, NNUE, NNUEAccumulator, activations::CRELU, features, vectors::{fast_vadd, fast_vsub},
+    Eval,
+    eval::nnue::{
+        EVALUATOR, L1, NNUE, NNUEAccumulator,
+        activations::CRELU,
+        features,
+        vectors::{fast_vadd, fast_vsub},
     },
 };
+use chess::{Board, ChessMove, Color, Piece, Square};
+use std::ops::{Index, IndexMut};
 
 impl Index<Color> for NNUEAccumulator {
     type Output = [i16; L1];
@@ -80,12 +84,7 @@ impl NNUEAccumulator {
         self[color] = fast_vsub(&self[color], &EVALUATOR.ft.weights[index]);
     }
 
-    pub fn update(
-        &self,
-        initial_board: &Board,
-        final_board: &Board,
-        mv: ChessMove,
-    ) -> Self {
+    pub fn update(&self, initial_board: &Board, final_board: &Board, mv: ChessMove) -> Self {
         debug_assert_eq!(&initial_board.make_move_new(mv), final_board);
         let piece_moving = initial_board
             .piece_on(mv.get_source())
@@ -112,8 +111,10 @@ impl NNUEAccumulator {
         // Check if there is capture
         if let Some(captured) = piece_captured {
             let captured_color = initial_board.color_on(to).unwrap(); // Should always unwrap
-            let white_index = features::white_feature_index(white_king, to, captured, captured_color);
-            let black_index = features::black_feature_index(black_king, to, captured, captured_color);
+            let white_index =
+                features::white_feature_index(white_king, to, captured, captured_color);
+            let black_index =
+                features::black_feature_index(black_king, to, captured, captured_color);
 
             result.remove_feature(white_index, Color::White);
             result.remove_feature(black_index, Color::Black);

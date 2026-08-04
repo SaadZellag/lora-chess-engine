@@ -1,14 +1,12 @@
+mod activations;
 mod features;
+mod impls;
 mod layer;
 mod vectors;
-mod impls;
-mod activations;
-
 
 // https://github.com/glinscott/nnue-pytorch/blob/master/docs/nnue.md
 
 use std::mem::MaybeUninit;
-
 
 use crate::eval::nnue::layer::{FeatureLayer, Layer};
 

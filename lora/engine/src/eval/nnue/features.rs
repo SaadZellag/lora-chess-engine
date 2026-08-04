@@ -2,7 +2,6 @@ use chess::Piece;
 use chess::{Board, Color, Square};
 use std::iter;
 
-
 const HALFKP_PIECES: [Piece; 5] = [
     Piece::Pawn,
     Piece::Knight,
@@ -10,7 +9,6 @@ const HALFKP_PIECES: [Piece; 5] = [
     Piece::Rook,
     Piece::Queen,
 ];
-
 
 pub fn white_feature_index(king_sq: Square, piece_sq: Square, piece: Piece, color: Color) -> usize {
     let p_idx = piece.to_index() * 2 + color.to_index();
@@ -42,8 +40,6 @@ fn test_halfkp() {
     use chess::{ALL_COLORS, ALL_SQUARES};
     let mut white_result = [0; NUM_FEATURES];
     let mut black_result = [0; NUM_FEATURES];
-
-
 
     for king_sq in ALL_SQUARES {
         for square in ALL_SQUARES {

@@ -1,6 +1,6 @@
-mod tt;
-mod search;
 mod eval;
+mod search;
+mod tt;
 mod util;
 
 pub use eval::Eval;
@@ -10,7 +10,6 @@ use chess::ChessMove;
 use crate::tt::TranspositionTable;
 
 pub const MAX_DEPTH: u8 = u8::MAX;
-
 
 pub struct LoraEngine {
     pub options: EngineOptions,

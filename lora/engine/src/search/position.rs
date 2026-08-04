@@ -1,5 +1,8 @@
+use crate::{
+    Eval,
+    eval::nnue::{NNUE, NNUEAccumulator},
+};
 use chess::{Board, BoardStatus, ChessMove};
-use crate::{Eval, eval::nnue::{NNUE, NNUEAccumulator}};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Position {
@@ -7,7 +10,6 @@ pub struct Position {
     acc: NNUEAccumulator,
     ply: u8,
 }
-
 
 impl Position {
     pub fn new(board: Board) -> Self {

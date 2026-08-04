@@ -33,7 +33,9 @@ fn print_options() {
 fn main() {
     let mut args = std::env::args();
     if let Some(arg) = args.nth(1) {
-        if arg.as_str() == "bench" { return bench::bench() }
+        if arg.as_str() == "bench" {
+            return bench::bench();
+        }
     }
 
     let mut board = Board::default();

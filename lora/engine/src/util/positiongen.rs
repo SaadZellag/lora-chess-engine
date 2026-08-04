@@ -36,10 +36,7 @@ const POSITIONS: &[&str] = &[
 ];
 
 fn get_testing_boards() -> VecDeque<Board> {
-    POSITIONS
-        .iter()
-        .flat_map(|p| Board::from_str(p))
-        .collect()
+    POSITIONS.iter().flat_map(|p| Board::from_str(p)).collect()
 }
 
 pub struct PositionGenerator {

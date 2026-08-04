@@ -1,7 +1,3 @@
-
-
-
-
 pub(crate) trait CRELU<I, O, const N: usize> {
     fn crelu(&self, output_scale: I) -> [O; N];
 }

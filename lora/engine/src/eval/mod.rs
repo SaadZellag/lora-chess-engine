@@ -4,14 +4,12 @@ use std::ops::{Add, Neg, Sub};
 
 use crate::MAX_DEPTH;
 
-
 #[derive(Debug, Clone, Copy, Eq)]
 pub enum Eval {
     MateIn(u8),
     MatedIn(u8),
     CentiPawn(i32),
 }
-
 
 impl Eval {
     pub const MAX: Eval = Eval::CentiPawn(10_000_000);

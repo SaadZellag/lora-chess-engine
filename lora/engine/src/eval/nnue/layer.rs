@@ -1,6 +1,4 @@
-use std::{
-    fmt::Debug,
-};
+use std::fmt::Debug;
 
 use crate::eval::nnue::vectors::fast_vdot;
 
