@@ -59,21 +59,6 @@ fn test_halfkp() {
         }
     }
 
-    let white_zeros: Vec<usize> = white_result
-        .iter()
-        .enumerate()
-        .filter(|(_, v)| **v == 0)
-        .map(|(i, _)| i)
-        .collect();
-    let black_zeros: Vec<usize> = black_result
-        .iter()
-        .enumerate()
-        .filter(|(_, v)| **v == 0)
-        .map(|(i, _)| i)
-        .collect();
-    println!("White result zeros at indices: {:?}", white_zeros);
-    println!("Black result zeros at indices: {:?}", black_zeros);
-
     assert_eq!(white_result, [1; NUM_FEATURES]);
     assert_eq!(black_result, [1; NUM_FEATURES]);
 }

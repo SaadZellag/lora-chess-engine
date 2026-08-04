@@ -2,7 +2,7 @@
 # Supports: EXE=, EVALFILE=, and bench command
 
 # Default values
-EXE ?= engine
+EXE ?= lora-engine
 EVALFILE ?=
 CARGO ?= cargo
 WORKSPACE_DIR ?= lora

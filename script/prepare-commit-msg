@@ -10,7 +10,7 @@ make build
 
 # Run benchmark
 echo "Running benchmark..."
-BENCH_OUTPUT=$(./engine bench)
+BENCH_OUTPUT=$(./lora-engine bench)
 
 # Parse output: "123456 nodes 123456 nps" -> extract nodes
 NODES=$(echo "$BENCH_OUTPUT" | grep -oP '^\d+(?= nodes)')
