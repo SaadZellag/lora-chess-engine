@@ -5,6 +5,7 @@ pub(crate) trait CRELU<I, O, const N: usize> {
 macro_rules! impl_celu {
     ($input:ty, $output:ty, $zero:expr, $min:expr, $max:expr) => {
         impl<const N: usize> CRELU<$input, $output, N> for [$input; N] {
+            #[inline(always)]
             fn crelu(&self, output_scale: $input) -> [$output; N] {
                 let mut result = [$zero; N];
                 for i in 0..N {

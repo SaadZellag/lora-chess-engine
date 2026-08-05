@@ -1,1 +1,1 @@
-mod positiongen;
+pub mod positiongen;

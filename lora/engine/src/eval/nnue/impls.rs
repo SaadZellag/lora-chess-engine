@@ -34,8 +34,13 @@ impl NNUE {
     pub fn eval(&self, acc: &NNUEAccumulator, stm: Color) -> Eval {
         let mut input = [0; { L1 * 2 }];
 
+
+        
         for i in 0..L1 {
             input[i] = acc[stm][i].into();
+        }
+
+        for i in 0..L1 {
             input[L1 + i] = acc[!stm][i].into();
         }
 
@@ -163,7 +168,7 @@ impl NNUEAccumulator {
 
 #[cfg(test)]
 mod tests {
-    use crate::{eval::nnue::NNUEAccumulator, util::PositionGenerator};
+    use crate::{eval::nnue::NNUEAccumulator, util::positiongen::PositionGenerator};
 
     #[test]
     fn test_acc_update() {
