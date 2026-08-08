@@ -1,6 +1,5 @@
 use crate::{
-    Eval,
-    eval::nnue::{NNUE, NNUEAccumulator},
+    Eval, eval::nnue::{EVALUATOR, NNUEAccumulator}, search::move_ordering::OrderedMoveGen,
 };
 use chess::{Board, BoardStatus, ChessMove};
 
@@ -29,13 +28,13 @@ impl Position {
         self.ply
     }
 
-    // pub fn possible_moves(&self) -> OrderedMoveGen {
-    //     OrderedMoveGen::new(&self.board)
-    // }
+    pub fn possible_moves(&self) -> OrderedMoveGen {
+        OrderedMoveGen::new(&self.board)
+    }
 
-    // pub fn possible_captures(&self) -> OrderedMoveGen {
-    //     OrderedMoveGen::with_mask(&self.board, *self.board.combined())
-    // }
+    pub fn possible_captures(&self) -> OrderedMoveGen {
+        OrderedMoveGen::with_mask(&self.board, *self.board.combined())
+    }
 
     pub fn make_move(&self, mv: ChessMove) -> Self {
         let new_board = self.board.make_move_new(mv);
@@ -56,13 +55,13 @@ impl Position {
         })
     }
 
-    pub fn eval(&self, nnue: &NNUE) -> Eval {
+    pub fn eval(&self) -> Eval {
         match self.board.status() {
             BoardStatus::Ongoing => {}
             BoardStatus::Stalemate => return Eval::NEUTRAL,
             BoardStatus::Checkmate => return Eval::MatedIn(self.ply),
         };
 
-        nnue.eval(&self.acc, self.board.side_to_move())
+        EVALUATOR.eval(&self.acc, self.board.side_to_move())
     }
 }

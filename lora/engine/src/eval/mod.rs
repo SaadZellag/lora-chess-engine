@@ -18,7 +18,7 @@ impl Eval {
     pub const WORST_EVAL: Eval = Eval::MatedIn(1);
     pub const MIN: Eval = Eval::CentiPawn(-10_000_000);
 
-    const UNIT: Eval = Eval::CentiPawn(1);
+    pub const UNIT: Eval = Eval::CentiPawn(1);
 
     pub const fn value(self) -> i32 {
         match self {

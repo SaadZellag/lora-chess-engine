@@ -1,11 +1,9 @@
 mod bench;
 
 use chess::Board;
-use engine::LoraEngine;
+use engine::{LoraEngine, SearchOptions, SearchPosition};
 use std::{
-    io::{stdin, BufRead, Write},
-    println,
-    str::FromStr,
+    io::{BufRead, Write, stdin}, println, rc::Rc, str::FromStr,
 };
 
 use vampirc_uci::{parse, UciMessage, UciOptionConfig};
@@ -30,6 +28,18 @@ fn print_options() {
     }));
 }
 
+struct Handler {}
+
+impl engine::SearchHandler for Handler {
+    fn new_result(&mut self, result: engine::SearchResult) {
+        // Handle new search result
+    }
+
+    fn should_stop(&self) -> bool {
+        false
+    }
+}
+
 fn main() {
     let mut args = std::env::args();
     if let Some(arg) = args.nth(1) {
@@ -38,7 +48,7 @@ fn main() {
         }
     }
 
-    let mut board = Board::default();
+    let mut position = SearchPosition::new();
     let mut engine = LoraEngine::new();
 
     let stdin = stdin();
@@ -76,21 +86,20 @@ fn main() {
                     moves,
                 } => {
                     if startpos {
-                        board = Board::default();
+                        position.board = Board::default();
                     } else if let Some(fen_str) = fen {
                         if let Ok(parsed) = Board::from_str(&fen_str.0) {
-                            board = parsed;
+                            position.board = parsed;
                         }
                     }
 
-                    for mv in moves {
-                        board = board.make_move_new(mv);
-                    }
+                    position.moves_played = moves;
+
                 }
 
                 UciMessage::SetOption { name, value: _ } => match name.to_lowercase().as_ref() {
                     "hash" => {
-                        // TODO
+
                     }
                     "threads" => {
                         // TODO
@@ -99,7 +108,7 @@ fn main() {
                 },
 
                 UciMessage::UciNewGame => {
-                    board = Board::default();
+                    position.board = Board::default();
                 }
 
                 UciMessage::Stop => {
@@ -112,10 +121,23 @@ fn main() {
                     ));
                 }
 
-                UciMessage::Go { .. } => {
-                    if let Some(best_move) = engine.search(&board) {
+                UciMessage::Go { search_control, ..  } => {
+                    let mut search_options = SearchOptions::new();
+                    if let Some(control) = search_control {
+                        search_options.max_depth = control.depth.unwrap_or(search_options.max_depth);
+                        search_options.max_nodes = control.nodes.unwrap_or(search_options.max_nodes);
+                        search_options.mate_search_depth = control.mate;
+                        search_options.moves_to_search = if control.search_moves.is_empty() {
+                            None
+                        } else {
+                            Some(control.search_moves)
+                        };
+                    }
+                    
+
+                    if let Some(result) = engine.search(position.clone(), search_options, &mut Handler {}) {
                         print_message(UciMessage::BestMove {
-                            best_move,
+                            best_move: result.best_move,
                             ponder: None,
                         });
                     } else {
