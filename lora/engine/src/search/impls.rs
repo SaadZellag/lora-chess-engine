@@ -228,14 +228,17 @@ impl<'a, H: SearchHandler> super::EngineSearcher<'a, H> {
             _return!(Some(Eval::NEUTRAL));
         }
 
-        self.search_state.nodes_searched += 1;
-
         if depth == 0 {
-            _return!(if quiese {
-                self.quiese(pos, 1, alpha, beta)
+            if quiese {
+                _return!(self.quiese(pos, 1, alpha, beta));
             } else {
-                Some(pos.eval())
-            });
+                let eval_result = pos.eval();
+                self.search_state.nodes_searched += 1;
+                if self.search_state.nodes_searched >= self.search_options.max_nodes {
+                    _return!(None);
+                }
+                _return!(Some(eval_result));
+            }
         }
 
         let mut itt = pos.possible_moves();

@@ -19,6 +19,10 @@ impl<'a, H: SearchHandler> super::EngineSearcher<'a, H> {
 
         let current_score = pos.eval();
         self.search_state.nodes_searched += 1;
+        
+        if self.search_state.nodes_searched >= self.search_options.max_nodes {
+            return None;
+        }
 
         if itt.len() == 0 {
             return Some(current_score);
