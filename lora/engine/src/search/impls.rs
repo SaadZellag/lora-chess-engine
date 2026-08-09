@@ -25,7 +25,7 @@ impl SearchOptions {
 
 
 impl<'a, H: SearchHandler> super::EngineSearcher<'a, H> {
-    pub fn new(position: SearchPosition, engine_options: EngineOptions, search_options: super::SearchOptions, handler: &'a mut H) -> Self {
+    pub fn new(position: SearchPosition, engine_options: EngineOptions, search_options: super::SearchOptions, handler: &'a mut H, transposition_table: &'a mut TranspositionTable) -> Self {
         Self {
             search_state: super::SearchState {
                 nodes_searched: 0,
@@ -33,12 +33,12 @@ impl<'a, H: SearchHandler> super::EngineSearcher<'a, H> {
                 selective_depth_reached: 0,
                 history_hash: Vec::new(),
                 table_hits: 0,
-                transposition_table: TranspositionTable::new(engine_options.tt_size_bytes),
             },
             engine_options,
             search_options,
             handler,
             position,
+            transposition_table,
         }
     }
 
@@ -137,7 +137,7 @@ impl<'a, H: SearchHandler> super::EngineSearcher<'a, H> {
         for i in 0..self.search_state.depth_reached {
             moves[i as usize] = current_mv;
             current_board = current_board.make_move(current_mv);
-            if let Some(ttentry) = self.search_state.transposition_table.get(&current_board) {
+            if let Some(ttentry) = self.transposition_table.get(&current_board) {
                 // assert_eq!(ttentry.flag, EntryType::Exact);
                 current_mv = ttentry.mv;
                 if !current_board.board().legal(current_mv) {
@@ -167,7 +167,7 @@ impl<'a, H: SearchHandler> super::EngineSearcher<'a, H> {
                 nodes_visited: self.search_state.nodes_searched,
                 tbl_hits: self.search_state.table_hits,
             },
-            hashfull: self.search_state.transposition_table.hashfull(),
+            hashfull: self.transposition_table.hashfull(),
             pv: moves,
         })
     }
@@ -188,7 +188,7 @@ impl<'a, H: SearchHandler> super::EngineSearcher<'a, H> {
         let board = pos.board();
 
         // Checking for transposition
-        let ttentry = self.search_state.transposition_table.get(pos);
+        let ttentry = self.transposition_table.get(pos);
         if let Some(ttentry) = ttentry {
             if ttentry.depth >= depth {
                 self.search_state.table_hits += 1;
@@ -413,7 +413,7 @@ impl<'a, H: SearchHandler> super::EngineSearcher<'a, H> {
             mv: best_mv,
         };
 
-        self.search_state.transposition_table.set(pos, ttentry);
+        self.transposition_table.set(pos, ttentry);
 
         _return!(Some(score));
     }

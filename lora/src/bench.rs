@@ -3,7 +3,7 @@ use std::{
     vec,
 };
 
-use engine::{SearchHandler, SearchResult, util::positiongen::PositionGenerator};
+use engine::{SearchHandler, SearchResult, util::positiongen::PositionGenerator, TranspositionTable};
 use std::rc::Rc;
 
 
@@ -45,9 +45,11 @@ pub fn bench() {
             board,
             moves_played: Vec::new(),
         };
+        
+        let mut transposition_table = TranspositionTable::new(engine.options.tt_size_bytes);
 
         let start = Instant::now();
-        engine.search(position, search_options.clone(), &mut handler);
+        engine.search(position, search_options.clone(), &mut handler, &mut transposition_table);
 
         total_time += start.elapsed();
         total_nodes += handler.nodes;

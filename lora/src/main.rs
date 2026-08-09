@@ -2,7 +2,7 @@ mod bench;
 
 use chess::{Board, ChessMove};
 use chrono::TimeDelta;
-use engine::{LoraEngine, SearchOptions, SearchPosition, SearchResult, Eval};
+use engine::{LoraEngine, SearchOptions, SearchPosition, SearchResult, Eval, TranspositionTable};
 use std::{
     io::{BufRead, Write, stdin}, println, rc::Rc, str::FromStr,
     sync::{Arc, atomic::AtomicBool},
@@ -149,6 +149,7 @@ fn main() {
 
     let mut position = SearchPosition::new();
     let mut engine = LoraEngine::new();
+    let mut transposition_table = TranspositionTable::new(engine.options.tt_size_bytes);
 
     let stdin = stdin();
     let lines = stdin.lock().lines().map(|l| l.unwrap_or_default());
@@ -201,6 +202,7 @@ fn main() {
                         if let Some(val) = value {
                             if let Ok(size_mb) = val.parse::<usize>() {
                                 engine.set_hash_size(size_mb);
+                                transposition_table = TranspositionTable::new(engine.options.tt_size_bytes);
                             }
                         }
                     }
@@ -214,6 +216,7 @@ fn main() {
                     position.board = Board::default();
                     position.moves_played.clear();
                     abort_flag.store(false, std::sync::atomic::Ordering::Relaxed);
+                    transposition_table = TranspositionTable::new(engine.options.tt_size_bytes);
                 }
 
                 UciMessage::Stop => {
@@ -248,7 +251,7 @@ fn main() {
                         last_result: None,
                     };
 
-                    if let Some(result) = engine.search(position.clone(), search_options, &mut handler) {
+                    if let Some(result) = engine.search(position.clone(), search_options, &mut handler, &mut transposition_table) {
                         print_message(UciMessage::BestMove {
                             best_move: result.best_move,
                             ponder: None,

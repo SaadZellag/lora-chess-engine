@@ -1,5 +1,5 @@
 pub mod position;
-mod tt;
+pub mod tt;
 mod impls;
 mod move_ordering;
 mod quiese;
@@ -53,6 +53,7 @@ struct EngineSearcher<'a, H: SearchHandler> {
     search_options: SearchOptions,
     search_state: SearchState,
     handler: &'a mut H,
+    transposition_table: &'a mut TranspositionTable,
 }
 
 struct SearchState {
@@ -61,14 +62,13 @@ struct SearchState {
     pub selective_depth_reached: u8,
     pub history_hash: Vec<u64>,
     pub table_hits: u64,
-    pub transposition_table: TranspositionTable,
 }
 
 
 
 impl LoraEngine {
-    pub fn search<H: SearchHandler>(&self, position: SearchPosition, search_options: SearchOptions, handler: &mut H) -> Option<SearchResult> {
-        let mut searcher = EngineSearcher::new(position, self.options, search_options, handler);
+    pub fn search<H: SearchHandler>(&self, position: SearchPosition, search_options: SearchOptions, handler: &mut H, tt: &mut TranspositionTable) -> Option<SearchResult> {
+        let mut searcher = EngineSearcher::new(position, self.options, search_options, handler, tt);
         searcher.best_move()
     }
 }

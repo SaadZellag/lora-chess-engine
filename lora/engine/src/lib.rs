@@ -4,6 +4,7 @@ mod search;
 
 pub use eval::Eval;
 pub use search::{SearchHandler, SearchPosition, SearchResult, SearchStats, SearchOptions};
+pub use search::tt::TranspositionTable;
 
 pub const MAX_DEPTH: u8 = u8::MAX;
 
