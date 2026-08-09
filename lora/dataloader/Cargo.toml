@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 engine = {path = "../engine"}
 games = {path = "../games"}
+features = {path = "../features"}
 libc = "0.2.0"
 bytemuck = "1.12.1"
 rand = "0.8.5"

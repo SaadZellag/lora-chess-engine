@@ -7,7 +7,7 @@ use libc::{c_char, size_t};
 
 use crate::{batch_provider::SparseBatchStream, utils::SparseBatch};
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn create_sparse_batch_stream(
     file: *const c_char,
     batch_size: size_t,
@@ -24,7 +24,7 @@ pub extern "C" fn create_sparse_batch_stream(
     ptr::null()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fetch_next_batch(stream: *mut SparseBatchStream) -> *const SparseBatch {
     if stream.is_null() {
         return ptr::null();
@@ -41,7 +41,7 @@ pub extern "C" fn fetch_next_batch(stream: *mut SparseBatchStream) -> *const Spa
     ptr::null()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn stream_len(stream: *mut SparseBatchStream) -> size_t {
     if stream.is_null() {
         return 0;
@@ -53,7 +53,7 @@ pub extern "C" fn stream_len(stream: *mut SparseBatchStream) -> size_t {
     len
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn drop_sparse_batch_stream(stream: *mut SparseBatchStream) {
     if stream.is_null() {
         return;
@@ -61,7 +61,7 @@ pub extern "C" fn drop_sparse_batch_stream(stream: *mut SparseBatchStream) {
     let _ = unsafe { Box::from_raw(stream) };
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn drop_sparse_batch(batch: *mut SparseBatch) {
     if batch.is_null() {
         return;

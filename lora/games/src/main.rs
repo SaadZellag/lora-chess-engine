@@ -1,4 +1,4 @@
-#![feature(slice_as_chunks)]
+#![allow(stable_features)]
 use std::env::{args, Args};
 
 use crate::{

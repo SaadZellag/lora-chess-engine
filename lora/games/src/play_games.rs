@@ -11,8 +11,6 @@ use std::{
 };
 
 use chess::{Board, BoardStatus, ChessMove, MoveGen};
-
-use games::create_io;
 use rand::{seq::SliceRandom, thread_rng, Rng};
 
 use crate::utils::{new_engine, shared, GameResult, ENTRY_SIZE_BYTES};
@@ -38,10 +36,23 @@ pub fn play(options: GameOptions) {
         options.threads
     );
 
-    let train_output =
-        shared(create_io!(train_path, BufWriter, create true, write true, truncate true));
-    let val_output =
-        shared(create_io!(val_path, BufWriter, create true, write true, truncate true));
+    // Open training output file
+    let train_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(train_path)
+        .unwrap();
+    let train_output = shared(BufWriter::new(train_file));
+
+    // Open validation output file
+    let val_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(val_path)
+        .unwrap();
+    let val_output = shared(BufWriter::new(val_file));
 
     let seen = Arc::new(Mutex::new(HashSet::with_capacity(
         options.num_positions / 10,
@@ -117,7 +128,7 @@ fn play_game() -> GameResult {
             break;
         }
 
-        if let Some(res) = engine.best_move() {
+        if let Some(res) = engine.best_move(board, &history) {
             moves.push((res.best_move, res.eval));
             board = board.make_move_new(res.best_move);
             history.push(board.get_hash());
@@ -129,9 +140,6 @@ fn play_game() -> GameResult {
             );
             return play_game();
         }
-
-        engine.set_position(board, &history);
-        engine.set_handler(Default::default());
 
         if moves.len() >= 150 {
             // Cannot be bothered with implementing the full logic of checking whether it's a draw

@@ -4,6 +4,8 @@ use std::{
     path::Path,
 };
 
+use games::utils::ENTRY_SIZE_BYTES;
+
 use crate::utils::SparseBatch;
 
 #[derive(Debug)]

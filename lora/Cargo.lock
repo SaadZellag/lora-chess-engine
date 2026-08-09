@@ -159,6 +159,7 @@ dependencies = [
  "bincode",
  "bytemuck",
  "engine",
+ "features",
  "games",
  "libc",
  "rand 0.8.7",

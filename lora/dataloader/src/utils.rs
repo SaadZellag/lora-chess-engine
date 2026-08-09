@@ -1,3 +1,6 @@
+use games::utils::TrainingDataEntry;
+use features::FEATURES_PER_SIDE;
+
 
 #[derive(Debug)]
 #[repr(C)]
@@ -40,8 +43,8 @@ impl SparseBatch {
 
         // dbg!(size);
         // dbg!(data);
-        let mut white_feature_indices = vec![0; 2 * size * CurrentFeatures::FEATURES_PER_SIDE];
-        let mut black_feature_indices = vec![0; 2 * size * CurrentFeatures::FEATURES_PER_SIDE];
+        let mut white_feature_indices = vec![0; 2 * size * FEATURES_PER_SIDE];
+        let mut black_feature_indices = vec![0; 2 * size * FEATURES_PER_SIDE];
 
         let mut white_index = 0;
         let mut black_index = 0;

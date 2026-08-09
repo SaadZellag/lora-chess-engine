@@ -1,8 +1,7 @@
 use std::{
     collections::HashSet,
-    fs::{self, File, OpenOptions},
-    io::{BufRead, BufReader, BufWriter, Read, Write},
-    path::Path,
+    fs::{File, OpenOptions},
+    io::{BufRead, BufReader, BufWriter, Write},
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
@@ -12,15 +11,10 @@ use std::{
 };
 
 use chess::Board;
-use engine::Eval;
-use games::{
-    clone, create_io,
-    utils::{new_engine, ENTRY_SIZE_BYTES},
-};
 use rand::{thread_rng, Rng};
 
 use crate::utils::shared;
-use crate::utils::GameResult;
+use crate::utils::{GameResult, ENTRY_SIZE_BYTES, new_engine};
 
 #[derive(Debug, Clone, Copy)]
 pub struct ParseOptions {
@@ -48,23 +42,42 @@ pub fn parse(options: ParseOptions) {
         total_positions, options.threads
     );
 
-    let input = shared(create_io!(file_path, BufReader, read true).lines());
+    let input_file = File::open(file_path).unwrap();
+    let input = shared(BufReader::new(input_file).lines());
 
-    let train_output =
-        shared(create_io!(train_path, BufWriter, create true, write true, truncate true));
-    let val_output =
-        shared(create_io!(val_path, BufWriter, create true, write true, truncate true));
+    // Open training output file
+    let train_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(train_path)
+        .unwrap();
+    let train_output = shared(BufWriter::new(train_file));
+
+    // Open validation output file
+    let val_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(val_path)
+        .unwrap();
+    let val_output = shared(BufWriter::new(val_file));
 
     let total_position_count = Arc::new(AtomicUsize::new(0));
     let seen = Arc::new(Mutex::new(HashSet::with_capacity(total_positions / 10)));
     let start = Instant::now();
 
     for _ in 0..options.threads {
-        clone!(total_position_count input train_output val_output seen);
+        // Clone all necessary values for the thread
+        let total_position_count_clone = total_position_count.clone();
+        let input_clone = input.clone();
+        let train_output_clone = train_output.clone();
+        let val_output_clone = val_output.clone();
+        let seen_clone = seen.clone();
 
         threads.push(thread::spawn(move || 'outer: loop {
             let mut lines = vec![];
-            if let Ok(mut input) = input.lock() {
+            if let Ok(mut input) = input_clone.lock() {
                 for _ in 0..1000 {
                     if let Some(Ok(line)) = input.next() {
                         lines.push(line);
@@ -77,38 +90,30 @@ pub fn parse(options: ParseOptions) {
             };
 
             // For manual abborts
-            if total_position_count.load(Ordering::Relaxed) > total_positions {
+            if total_position_count_clone.load(Ordering::Relaxed) > total_positions {
                 break;
             }
 
-            // let parsed: Vec<_> = lines
-            //     .iter()
-            //     .map(|l| parse_line(l))
-            //     .flatten()
-            //     .map(|p| p.to_bin(seen.clone()))
-            //     .flatten()
-            //     .collect();
-
             let parsed: Vec<u8> = parse_lines(lines)
                 .iter()
-                .map(|p| p.to_bin(seen.clone()))
+                .map(|p| p.to_bin(seen_clone.clone()))
                 .flatten()
                 .collect();
 
             // Splitting 90% train 10% test
             let output = match thread_rng().gen_bool(0.9) {
-                true => &train_output,
-                false => &val_output,
+                true => &train_output_clone,
+                false => &val_output_clone,
             };
 
             if let Ok(mut out) = output.lock() {
                 out.write_all(&parsed).unwrap();
-                total_position_count.fetch_add(parsed.len() / ENTRY_SIZE_BYTES, Ordering::Relaxed);
+                total_position_count_clone.fetch_add(parsed.len() / ENTRY_SIZE_BYTES, Ordering::Relaxed);
 
                 out.flush().unwrap();
             }
 
-            let completed = 1 + total_position_count.load(Ordering::Relaxed);
+            let completed = 1 + total_position_count_clone.load(Ordering::Relaxed);
 
             let percentage = completed as f64 / total_positions as f64 * 100.0;
             let elapsed = start.elapsed();
@@ -120,7 +125,7 @@ pub fn parse(options: ParseOptions) {
             print!(
                 "\r\x1b[K{:.2}% Done! ({} positions). ({:.1} pos/sec) ETA: {}h {}min",
                 percentage,
-                total_position_count.load(Ordering::Relaxed),
+                total_position_count_clone.load(Ordering::Relaxed),
                 completed as f64 / elapsed.as_secs_f64(),
                 eta_hours,
                 eta_mins
@@ -156,10 +161,7 @@ fn parse_lines(lines: Vec<String>) -> Vec<GameResult> {
                 _ => return None,
             };
 
-            engine.set_position(board, &vec![]);
-            engine.set_handler(Default::default());
-
-            let result = engine.best_move()?;
+            let result = engine.best_move(board, &vec![])?;
 
             Some(GameResult {
                 board,
@@ -171,40 +173,6 @@ fn parse_lines(lines: Vec<String>) -> Vec<GameResult> {
         .collect()
 }
 
-fn parse_line(line: &str) -> Option<GameResult> {
-    let mut content = line.split('|');
-
-    let board: Board = content.next()?.parse().ok()?;
-
-    let mv = content.next()?.parse().ok()?;
-    let eval = Eval::CentiPawn(content.next()?.parse().ok()?);
-
-    let winner = match content.next()? {
-        "1" => Some(board.side_to_move()),
-        "-1" => Some(!board.side_to_move()),
-        "0" => None,
-        _ => return None,
-    };
-
-    Some(GameResult {
-        board,
-        moves: vec![(mv, eval)],
-        winner,
-    })
-}
-
-// fn split_data_evenly<P>(file_path: P)
-// where
-//     P: AsRef<Path> + Copy,
-// {
-//     // Train to validation
-//     const RATIO_NUM: i32 = 9;
-//     const RATIO_DEN: i32 = 10;
-//     const TRAIN_RANGE: i32 = RATIO_NUM * 2;
-//     const VAL_RANGE: i32 = RATIO_DEN * 2;
-
-//     let mut input = create_io!(file_path, BufReader, read true);
-//     let mut train_output =
 //         create_io!("training_data.bin", BufWriter, create true, write true, truncate true);
 //     let mut val_output =
 //         create_io!("val_training_data.bin", BufWriter, create true, write true, truncate true);
