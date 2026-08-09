@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = [
+members = ["dataloader",
     "engine"
-]
+, "features"]
 
 [dependencies]
 engine = { version = "0.1.0", path = "engine" }

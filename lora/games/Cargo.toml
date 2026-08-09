@@ -1,0 +1,20 @@
+[package]
+name = "games"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+engine = {path = "../engine"}
+features = {path = "../features"}
+chess = "3.2.0"
+rand = "0.8.5"
+rayon = "1.5.3"
+bytemuck = "1.12.1"
+itertools = "0.10.3"
+bincode = "1.3.3"
+serde = {version = "1.0.144", features = ["derive"]}
+
+[build]
+rustflags = ["-C", "target-cpu=native"]

@@ -1,0 +1,20 @@
+[package]
+name = "dataloader"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+engine = {path = "../engine"}
+games = {path = "../games"}
+libc = "0.2.0"
+bytemuck = "1.12.1"
+rand = "0.8.5"
+bincode = "1.3.3"
+serde = {version = "1.0.144", features = ["derive"]}
+
+[lib]
+name = "dataloader"
+crate-type = ["dylib"]
+
+[build]
+rustflags = ["-C", "target-cpu=native"]

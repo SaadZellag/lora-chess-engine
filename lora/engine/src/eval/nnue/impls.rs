@@ -1,11 +1,9 @@
 use crate::{
-    Eval,
-    eval::nnue::{
-        EVALUATOR, L1, NNUE, NNUEAccumulator,
+    Eval, eval::nnue::{
+        EVALUATOR, NNUE, NNUEAccumulator,
         activations::CRELU,
-        features,
         vectors::{fast_vadd, fast_vsub},
-    },
+    }, nnue_conf::L1,
 };
 use chess::{Board, ChessMove, Color, Piece, Square};
 use std::ops::{Index, IndexMut};

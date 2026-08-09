@@ -1,6 +1,12 @@
+mod conf;
+
+pub use conf::*;
+
 use chess::Piece;
 use chess::{Board, Color, Square};
 use std::iter;
+
+
 
 const HALFKP_PIECES: [Piece; 5] = [
     Piece::Pawn,
@@ -41,10 +47,9 @@ fn flip(square: Square) -> Square {
 
 #[cfg(test)]
 mod tests {
-    use crate::eval::nnue::{
-        NUM_FEATURES,
-        features::{HALFKP_PIECES, black_feature_index, white_feature_index},
-    };
+    use crate::{HALFKP_PIECES, NUM_FEATURES, white_feature_index, black_feature_index};
+
+    
 
     #[test]
     fn test_halfkp() {

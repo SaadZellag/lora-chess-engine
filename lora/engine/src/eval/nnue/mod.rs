@@ -1,16 +1,16 @@
 mod activations;
-mod features;
 mod impls;
 mod layer;
 mod vectors;
+pub mod nnue_conf;
 
 // https://github.com/glinscott/nnue-pytorch/blob/master/docs/nnue.md
 
 use std::mem::MaybeUninit;
+use nnue_conf::*;
+use features::NUM_FEATURES;
 
 use crate::eval::nnue::layer::{FeatureLayer, Layer};
-
-include!("./nnue_conf.rs");
 
 pub static EVALUATOR: NNUE = unsafe { MaybeUninit::zeroed().assume_init() }; // TODO: Initialize this properly
 
