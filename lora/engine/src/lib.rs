@@ -25,6 +25,10 @@ impl LoraEngine {
             }
         }
     }
+
+    pub fn set_hash_size(&mut self, size_mb: usize) {
+        self.options.tt_size_bytes = size_mb * 1024 * 1024;
+    }
 }
 
 impl Default for LoraEngine {

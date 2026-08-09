@@ -9,11 +9,64 @@ use std::{
     time::{Instant, Duration},
 };
 
-use vampirc_uci::{UciInfoAttribute, UciMessage, UciOptionConfig, parse};
+use vampirc_uci::{UciInfoAttribute, UciMessage, UciOptionConfig, UciTimeControl, parse};
 
 fn print_message(msg: UciMessage) {
     println!("{}", msg);
     std::io::stdout().flush().unwrap();
+}
+
+fn calculate_time_to_think(position: &SearchPosition, time_control: &Option<UciTimeControl>) -> Duration {
+    match time_control {
+        Some(UciTimeControl::MoveTime(move_time)) => {
+            move_time.to_std().unwrap_or(Duration::from_secs(5))
+        }
+        Some(UciTimeControl::TimeLeft {
+            white_time,
+            black_time,
+            white_increment,
+            black_increment,
+            ..
+        }) => {
+            // Apply moves to get current board state
+            let mut current_board = position.board;
+            for mv in &position.moves_played {
+                current_board = current_board.make_move_new(*mv);
+            }
+            
+            let side = current_board.side_to_move();
+            let our_time = if side == chess::Color::White {
+                white_time
+            } else {
+                black_time
+            };
+            let our_increment = if side == chess::Color::White {
+                white_increment
+            } else {
+                black_increment
+            };
+
+            let mut time_to_use = Duration::ZERO;
+
+            // 5% of remaining time
+            if let Some(time) = our_time {
+                let remaining_ms = time.num_milliseconds().max(0) as u64;
+                time_to_use = time_to_use + Duration::from_millis(remaining_ms / 20);
+            }
+
+            // 50% of increment
+            if let Some(inc) = our_increment {
+                let inc_ms = inc.num_milliseconds().max(0) as u64;
+                time_to_use = time_to_use + Duration::from_millis(inc_ms / 2);
+            }
+
+            time_to_use
+        }
+        Some(UciTimeControl::Infinite) | Some(UciTimeControl::Ponder) => {
+            Duration::from_secs(31_557_600) // ~1 year
+        }
+        None => Duration::from_secs(5), // Default fallback
+    }
 }
 
 fn print_options() {
@@ -95,7 +148,7 @@ fn main() {
     let abort_flag = Arc::new(AtomicBool::new(false));
 
     let mut position = SearchPosition::new();
-    let engine = LoraEngine::new();
+    let mut engine = LoraEngine::new();
 
     let stdin = stdin();
     let lines = stdin.lock().lines().map(|l| l.unwrap_or_default());
@@ -143,18 +196,24 @@ fn main() {
 
                 }
 
-                UciMessage::SetOption { name, value: _ } => match name.to_lowercase().as_ref() {
+                UciMessage::SetOption { name, value } => match name.to_lowercase().as_ref() {
                     "hash" => {
-                        
+                        if let Some(val) = value {
+                            if let Ok(size_mb) = val.parse::<usize>() {
+                                engine.set_hash_size(size_mb);
+                            }
+                        }
                     }
                     "threads" => {
-                        // TODO
+                        // Ignore - single threaded only
                     }
                     _ => {}
                 },
 
                 UciMessage::UciNewGame => {
                     position.board = Board::default();
+                    position.moves_played.clear();
+                    abort_flag.store(false, std::sync::atomic::Ordering::Relaxed);
                 }
 
                 UciMessage::Stop => {
@@ -179,11 +238,12 @@ fn main() {
                             Some(control.search_moves)
                         };
                     }
-                    
+
+                    let time_allowed = calculate_time_to_think(&position, &time_control);
                     
                     let mut handler = UCIHandler {
                         start: Instant::now(),
-                        time_allowed: Duration::from_secs(5),
+                        time_allowed,
                         abort_flag: abort_flag.clone(),
                         last_result: None,
                     };
