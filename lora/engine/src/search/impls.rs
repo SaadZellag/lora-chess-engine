@@ -80,6 +80,19 @@ impl<'a, H: SearchHandler> super::EngineSearcher<'a, H> {
             }
         }
 
+        // Output final info with actual accumulated stats
+        if let Some(mut final_result) = res {
+            final_result.stats = SearchStats {
+                depth: final_result.stats.depth,
+                sel_depth: self.search_state.selective_depth_reached,
+                nodes_visited: self.search_state.nodes_searched,
+                tbl_hits: self.search_state.table_hits,
+            };
+            final_result.hashfull = self.transposition_table.hashfull();
+            self.handler.new_result(final_result);
+            res = Some(final_result);
+        }
+
         res
     }
 
