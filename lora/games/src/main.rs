@@ -1,5 +1,5 @@
 #![allow(stable_features)]
-use std::env::{args, Args};
+use clap::{Parser, Subcommand};
 
 use crate::{
     parse_games::{parse, ParseOptions},
@@ -12,39 +12,69 @@ mod play_games;
 mod test;
 mod utils;
 
+#[derive(Parser)]
+#[command(name = "games")]
+#[command(about = "Chess training data generation tool", long_about = None)]
+#[command(version)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Play chess games to generate training data
+    Play {
+        /// Number of positions to generate
+        #[arg(value_name = "NUM")]
+        num_positions: usize,
+
+        /// Number of threads to use for parallel game generation
+        #[arg(value_name = "THREADS")]
+        threads: usize,
+    },
+
+    /// Parse FEN positions from file to generate training data
+    Parse {
+        /// Number of threads to use for parallel parsing
+        #[arg(value_name = "THREADS")]
+        threads: usize,
+
+        /// Maximum number of positions to parse (optional, parses all if not specified)
+        #[arg(value_name = "MAX")]
+        max_positions: Option<usize>,
+    },
+
+    /// Test mode for validating data generation
+    Test,
+}
+
 fn main() {
-    let mut args = args();
-    args.next(); // Skipping program name
+    let cli = Cli::parse();
 
-    match args.next().as_deref() {
-        Some("play") => run_games(args),
-        Some("parse") => run_parse(args),
-        Some("test") => test(),
-        Some(opt) => eprintln!("Invalid option {}", opt),
-        None => eprintln!("Put an option with args"),
+    match cli.command {
+        Commands::Play {
+            num_positions,
+            threads,
+        } => {
+            let options = GameOptions {
+                num_positions,
+                threads,
+            };
+            play(options);
+        }
+        Commands::Parse {
+            threads,
+            max_positions,
+        } => {
+            let options = ParseOptions {
+                threads,
+                max_positions,
+            };
+            parse(options);
+        }
+        Commands::Test => {
+            test();
+        }
     }
-}
-
-fn run_games(mut args: Args) {
-    let num_positions: usize = args.next().unwrap().parse().unwrap();
-    let threads: usize = args.next().unwrap().parse().unwrap();
-
-    let options = GameOptions {
-        num_positions,
-        threads,
-    };
-
-    play(options);
-}
-
-fn run_parse(mut args: Args) {
-    let threads: usize = args.next().unwrap().parse().unwrap();
-    let games: Option<usize> = args.next().map(|s| s.parse().unwrap());
-
-    let options = ParseOptions {
-        threads,
-        max_positions: games,
-    };
-
-    parse(options);
 }
