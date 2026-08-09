@@ -1,12 +1,15 @@
 mod bench;
 
-use chess::Board;
-use engine::{LoraEngine, SearchOptions, SearchPosition};
+use chess::{Board, ChessMove};
+use chrono::TimeDelta;
+use engine::{LoraEngine, SearchOptions, SearchPosition, SearchResult, Eval};
 use std::{
     io::{BufRead, Write, stdin}, println, rc::Rc, str::FromStr,
+    sync::{Arc, atomic::AtomicBool},
+    time::{Instant, Duration},
 };
 
-use vampirc_uci::{parse, UciMessage, UciOptionConfig};
+use vampirc_uci::{UciInfoAttribute, UciMessage, UciOptionConfig, parse};
 
 fn print_message(msg: UciMessage) {
     println!("{}", msg);
@@ -28,15 +31,56 @@ fn print_options() {
     }));
 }
 
-struct Handler {}
+#[derive(Clone)]
+struct UCIHandler {
+    start: Instant,
+    time_allowed: Duration,
+    abort_flag: Arc<AtomicBool>,
+    last_result: Option<SearchResult>,
+}
 
-impl engine::SearchHandler for Handler {
+impl engine::SearchHandler for UCIHandler {
     fn new_result(&mut self, result: engine::SearchResult) {
-        // Handle new search result
+        let depth = UciInfoAttribute::Depth(result.stats.depth);
+        let sel_depth = UciInfoAttribute::SelDepth(result.stats.sel_depth);
+        let std_duration = self.start.elapsed();
+        let time_delta = TimeDelta::from_std(std_duration).expect("duration out of bounds");
+
+        let time = UciInfoAttribute::Time(time_delta);
+        let nodes = UciInfoAttribute::Nodes(result.stats.nodes_visited);
+        let score = match result.eval {
+            Eval::MateIn(x) => UciInfoAttribute::from_mate(x as i8),
+            Eval::MatedIn(x) => UciInfoAttribute::from_mate(-(x as i8)),
+            Eval::CentiPawn(x) => UciInfoAttribute::from_centipawns(x as i32),
+        };
+        let curr_move = UciInfoAttribute::CurrMove(result.best_move);
+        let nps = {
+            let delta = self.start.elapsed();
+            let nodes = result.stats.nodes_visited;
+            let nps = (nodes as f64 / delta.as_secs_f64()) as u64;
+            UciInfoAttribute::Nps(nps)
+        };
+        let tbl_hits = UciInfoAttribute::TbHits(result.stats.tbl_hits);
+        let hashfull = UciInfoAttribute::HashFull(result.hashfull as u16);
+        let pv = UciInfoAttribute::Pv(
+            result
+                .pv
+                .iter()
+                .cloned()
+                .take_while(|&e| e != ChessMove::default())
+                .collect(),
+        );
+
+        let attributes = vec![
+            depth, sel_depth, time, nodes, score, curr_move, nps, tbl_hits, hashfull, pv,
+        ];
+        print_message(UciMessage::Info(attributes));
     }
 
     fn should_stop(&self) -> bool {
-        false
+        (self.abort_flag.load(std::sync::atomic::Ordering::Relaxed)
+            || self.start.elapsed() >= self.time_allowed)
+            && self.last_result.is_some()
     }
 }
 
@@ -48,8 +92,10 @@ fn main() {
         }
     }
 
+    let abort_flag = Arc::new(AtomicBool::new(false));
+
     let mut position = SearchPosition::new();
-    let mut engine = LoraEngine::new();
+    let engine = LoraEngine::new();
 
     let stdin = stdin();
     let lines = stdin.lock().lines().map(|l| l.unwrap_or_default());
@@ -99,7 +145,7 @@ fn main() {
 
                 UciMessage::SetOption { name, value: _ } => match name.to_lowercase().as_ref() {
                     "hash" => {
-
+                        
                     }
                     "threads" => {
                         // TODO
@@ -112,7 +158,7 @@ fn main() {
                 }
 
                 UciMessage::Stop => {
-                    // TODO
+                    abort_flag.store(true, std::sync::atomic::Ordering::Relaxed);
                 }
 
                 UciMessage::PonderHit => {
@@ -121,7 +167,7 @@ fn main() {
                     ));
                 }
 
-                UciMessage::Go { search_control, ..  } => {
+                UciMessage::Go { search_control, time_control  } => {
                     let mut search_options = SearchOptions::new();
                     if let Some(control) = search_control {
                         search_options.max_depth = control.depth.unwrap_or(search_options.max_depth);
@@ -134,8 +180,15 @@ fn main() {
                         };
                     }
                     
+                    
+                    let mut handler = UCIHandler {
+                        start: Instant::now(),
+                        time_allowed: Duration::from_secs(5),
+                        abort_flag: abort_flag.clone(),
+                        last_result: None,
+                    };
 
-                    if let Some(result) = engine.search(position.clone(), search_options, &mut Handler {}) {
+                    if let Some(result) = engine.search(position.clone(), search_options, &mut handler) {
                         print_message(UciMessage::BestMove {
                             best_move: result.best_move,
                             ponder: None,
@@ -143,6 +196,9 @@ fn main() {
                     } else {
                         print_message(UciMessage::info_string("No move found".to_string()));
                     }
+                },
+                UciMessage::Quit => {
+                    break 'outer;
                 }
                 _ => {}
             }

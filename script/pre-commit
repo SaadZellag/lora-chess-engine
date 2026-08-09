@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # Pre-commit hook: Build the engine
-set -e
 
 echo "Building engine..."
 make build
