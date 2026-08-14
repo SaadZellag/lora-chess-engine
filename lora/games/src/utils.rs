@@ -154,7 +154,7 @@ impl GameEngine {
 
         let options = SearchOptions {
             max_depth: 255,
-            max_nodes: u64::MAX,
+            max_nodes: 40000,
             mate_search_depth: None,
             moves_to_search: None,
         };

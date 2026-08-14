@@ -1,3 +1,7 @@
 lora/target
 .vscode
 lora-engine
+venv
+training/__pycache__
+training/best_nets
+training/lightning_logs
