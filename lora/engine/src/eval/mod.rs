@@ -6,8 +6,8 @@ use crate::MAX_DEPTH;
 
 #[derive(Debug, Clone, Copy, Eq)]
 pub enum Eval {
-    MateIn(u8),
-    MatedIn(u8),
+    MateIn(u16),
+    MatedIn(u16),
     CentiPawn(i32),
 }
 
@@ -28,7 +28,7 @@ impl Eval {
         }
     }
 
-    pub fn add_ply(self, ply: u8) -> Self {
+    pub fn add_ply(self, ply: u16) -> Self {
         match self {
             Eval::MateIn(x) => Eval::MateIn(x.saturating_add(ply)),
             Eval::MatedIn(x) => Eval::MatedIn(x.saturating_add(ply)),
@@ -36,7 +36,7 @@ impl Eval {
         }
     }
 
-    pub fn sub_ply(self, ply: u8) -> Self {
+    pub fn sub_ply(self, ply: u16) -> Self {
         match self {
             Eval::MateIn(x) => Eval::MateIn(x.saturating_sub(ply)),
             Eval::MatedIn(x) => Eval::MatedIn(x.saturating_sub(ply)),
@@ -49,9 +49,9 @@ impl Eval {
             Eval::MateIn(_) | Eval::MatedIn(_) => self,
             Eval::CentiPawn(x) => {
                 if Self::BEST_EVAL.value() - x < MAX_DEPTH as i32 {
-                    Eval::MateIn((Self::BEST_EVAL.value() - x + 1) as u8)
+                    Eval::MateIn((Self::BEST_EVAL.value() - x + 1).try_into().unwrap())
                 } else if x - Self::WORST_EVAL.value() < MAX_DEPTH as i32 {
-                    Eval::MatedIn((x - Self::WORST_EVAL.value() + 1) as u8)
+                    Eval::MatedIn((x - Self::WORST_EVAL.value() + 1).try_into().unwrap())
                 } else {
                     self
                 }

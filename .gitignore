@@ -5,3 +5,4 @@ venv
 training/__pycache__
 training/best_nets
 training/lightning_logs
+training-data

@@ -5,12 +5,14 @@ use crate::{
     parse_games::{parse, ParseOptions},
     play_games::{play, GameOptions},
     test::test,
+    bench::bench,
 };
 
 mod parse_games;
 mod play_games;
 mod test;
 mod utils;
+mod bench;
 
 #[derive(Parser)]
 #[command(name = "games")]
@@ -47,6 +49,13 @@ enum Commands {
 
     /// Test mode for validating data generation
     Test,
+
+    /// Benchmark various things
+    Bench {
+        /// Path to the file to benchmark
+        #[arg(value_name = "PATH")]
+        path: String,
+    }
 }
 
 fn main() {
@@ -75,6 +84,9 @@ fn main() {
         }
         Commands::Test => {
             test();
+        },
+        Commands::Bench { path } => {
+            bench(&path);
         }
     }
 }

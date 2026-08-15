@@ -59,7 +59,7 @@ impl Position {
         match self.board.status() {
             BoardStatus::Ongoing => {}
             BoardStatus::Stalemate => return Eval::NEUTRAL,
-            BoardStatus::Checkmate => return Eval::MatedIn(self.ply),
+            BoardStatus::Checkmate => return Eval::MatedIn(self.ply.into()),
         };
 
         EVALUATOR.eval(&self.acc, self.board.side_to_move())

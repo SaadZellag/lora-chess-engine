@@ -55,7 +55,7 @@ impl TranspositionTable {
         let mut entry = self.table[index];
 
         (entry.flag != EntryType::Invalid && entry.hash == hash).then(|| {
-            entry.eval = entry.eval.add_ply(pos.ply());
+            entry.eval = entry.eval.add_ply(pos.ply().into());
             entry
         })
     }
@@ -75,7 +75,7 @@ impl TranspositionTable {
                 self.num_valid_entries += 1;
             }
 
-            entry.eval = entry.eval.sub_ply(pos.ply());
+            entry.eval = entry.eval.sub_ply(pos.ply().into());
             self.table[index] = entry;
         }
 

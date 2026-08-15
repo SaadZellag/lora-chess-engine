@@ -261,7 +261,7 @@ impl<'a, H: SearchHandler> super::EngineSearcher<'a, H> {
             } else {
                 match board.checkers().popcnt() {
                     0 => Some(Eval::NEUTRAL),
-                    _ => Some(Eval::MatedIn(pos.ply())),
+                    _ => Some(Eval::MatedIn(pos.ply().into())),
                 }
             });
         }
