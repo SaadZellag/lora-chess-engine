@@ -14,7 +14,7 @@ pub fn bench(path: &str) {
     let mut reader = BinPackReader::new(file).unwrap();
 
     const CHUNK_SIZE: usize = 2 << 16;
-    const NUM_CHUNKS: usize = 100;
+    const NUM_CHUNKS: usize = 10;
 
     let start = Instant::now();
     let mut total_count = 0;

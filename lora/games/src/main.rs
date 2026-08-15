@@ -48,7 +48,10 @@ enum Commands {
     },
 
     /// Test mode for validating data generation
-    Test,
+    Test {
+        #[arg(value_name = "BINPACK_FILE")]
+        binpack_file: String,
+    },
 
     /// Benchmark various things
     Bench {
@@ -82,8 +85,8 @@ fn main() {
             };
             parse(options);
         }
-        Commands::Test => {
-            test();
+        Commands::Test { binpack_file } => {
+            test(&binpack_file);
         },
         Commands::Bench { path } => {
             bench(&path);
