@@ -1,5 +1,5 @@
 use crate::search::position::Position;
-use chess::ChessMove;
+use cozy_chess::Move;
 
 use crate::Eval;
 
@@ -11,13 +11,13 @@ pub enum EntryType {
     Invalid,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TTEntry {
     pub hash: u64,
     pub flag: EntryType,
     pub depth: u8,
     pub eval: Eval,
-    pub mv: ChessMove,
+    pub mv: Move,
 }
 
 impl Default for TTEntry {
@@ -27,7 +27,7 @@ impl Default for TTEntry {
             flag: EntryType::Invalid,
             depth: 0,
             eval: Eval::NEUTRAL,
-            mv: ChessMove::default(),
+            mv: "a1a1".parse().unwrap(),
         }
     }
 }
@@ -50,7 +50,7 @@ impl TranspositionTable {
     }
 
     pub fn get(&self, pos: &Position) -> Option<TTEntry> {
-        let hash = pos.board().get_hash();
+        let hash = pos.board().hash();
         let index = self.to_entry_hash(hash);
         let mut entry = self.table[index];
 

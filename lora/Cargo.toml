@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = ["dataloader",
+members = ["common","dataloader",
     "engine"
 , "features"]
 
 [dependencies]
 engine = { version = "0.1.0", path = "engine" }
-chess = "3.2.0"
-vampirc-uci = { version = "0.11.1", features = ["chess"] }
+cozy-chess = "0.3.4"
+cozy-uci = { git = "https://github.com/analog-hors/cozy-uci.git" }
 chrono = "0.4.45"

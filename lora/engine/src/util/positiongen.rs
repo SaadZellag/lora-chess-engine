@@ -1,6 +1,7 @@
 use std::{collections::VecDeque, str::FromStr};
 
-use chess::{Board, MoveGen};
+use common::cozy_chess::CozyChessHelper;
+use cozy_chess::{Board, Move};
 
 const POSITIONS: &[&str] = &[
     "Q7/5Q2/8/8/3k4/6P1/6BP/7K b - - 0 67",
@@ -41,7 +42,7 @@ fn get_testing_boards() -> VecDeque<Board> {
 
 pub struct PositionGenerator {
     current_board: Board,
-    current_gen: MoveGen,
+    current_moves: Vec<Move>,
     next_batch: VecDeque<Board>,
     max_size: usize,
 }
@@ -50,10 +51,16 @@ impl PositionGenerator {
     pub fn new() -> Self {
         let mut boards = get_testing_boards();
         let current_board = boards.pop_front().unwrap();
-        let current_gen = MoveGen::new_legal(&current_board);
+        let mut current_moves = vec![];
+        current_board.generate_moves(|moves| {
+            for _mv in moves {
+                current_moves.push(_mv);
+            }
+            false
+        });
         Self {
             current_board,
-            current_gen,
+            current_moves,
             next_batch: boards,
             max_size: usize::MAX,
         }
@@ -71,17 +78,23 @@ impl Iterator for PositionGenerator {
     type Item = Board;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(mv) = self.current_gen.next() {
-            let copy = self.current_board.make_move_new(mv);
+        if let Some(mv) = self.current_moves.pop() {
+            let copy = self.current_board.play_unchecked_new(mv);
             if self.next_batch.len() < self.max_size {
-                self.next_batch.push_back(copy);
+                self.next_batch.push_back(copy.clone());
             }
             return Some(copy);
         }
         let board = self.next_batch.pop_front().unwrap();
-        let movegen = MoveGen::new_legal(&board);
+        let mut current_moves = vec![];
+        board.generate_moves(|moves| {
+            for _mv in moves {
+                current_moves.push(_mv);
+            }
+            false
+        });
+        self.current_moves = current_moves;
         self.current_board = board;
-        self.current_gen = movegen;
         self.next()
     }
 }

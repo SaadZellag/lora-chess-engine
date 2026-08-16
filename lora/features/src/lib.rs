@@ -1,9 +1,8 @@
 mod conf;
 
 pub use conf::*;
+use cozy_chess::{Board, Color, Piece, Square};
 
-use chess::Piece;
-use chess::{Board, Color, Square};
 use std::iter;
 
 
@@ -17,21 +16,21 @@ const HALFKP_PIECES: [Piece; 5] = [
 ];
 
 pub fn white_feature_index(king_sq: Square, piece_sq: Square, piece: Piece, color: Color) -> usize {
-    let p_idx = piece.to_index() * 2 + color.to_index();
-    piece_sq.to_index() + (p_idx + king_sq.to_index() * 10) * 64
+    let p_idx = piece as usize * 2 + color as usize;
+    piece_sq as usize + (p_idx + king_sq as usize * 10) * 64
 }
 
 pub fn black_feature_index(king_sq: Square, piece_sq: Square, piece: Piece, color: Color) -> usize {
-    white_feature_index(flip(king_sq), flip(piece_sq), piece, !color)
+    white_feature_index(king_sq.flip_rank(), piece_sq.flip_rank(), piece, !color)
 }
 
 pub fn features(board: &Board) -> impl Iterator<Item = (usize, usize)> + '_ {
-    let white_king_sq = board.king_square(Color::White);
-    let black_king_sq = board.king_square(Color::Black);
+    let white_king_sq = board.king(Color::White);
+    let black_king_sq = board.king(Color::Black);
 
     HALFKP_PIECES
         .iter()
-        .flat_map(|&p| iter::repeat(p).zip(*board.pieces(p)))
+        .flat_map(|&p| iter::repeat(p).zip(board.pieces(p)))
         .map(move |(p, sq)| {
             let color = board.color_on(sq).expect("Corrupted board");
             let white_index = white_feature_index(white_king_sq, sq, p, color);
@@ -41,26 +40,24 @@ pub fn features(board: &Board) -> impl Iterator<Item = (usize, usize)> + '_ {
         })
 }
 
-fn flip(square: Square) -> Square {
-    unsafe { Square::new(square.to_int() ^ 56) }
-}
 
 #[cfg(test)]
 mod tests {
-    use crate::{HALFKP_PIECES, NUM_FEATURES, white_feature_index, black_feature_index};
+    use cozy_chess::{Color, Square};
+
+use crate::{HALFKP_PIECES, NUM_FEATURES, white_feature_index, black_feature_index};
 
     
 
     #[test]
     fn test_halfkp() {
-        use chess::{ALL_COLORS, ALL_SQUARES};
         let mut white_result = [0; NUM_FEATURES];
         let mut black_result = [0; NUM_FEATURES];
 
-        for king_sq in ALL_SQUARES {
-            for square in ALL_SQUARES {
+        for king_sq in Square::ALL {
+            for square in Square::ALL {
                 for piece in HALFKP_PIECES {
-                    for color in ALL_COLORS {
+                    for color in Color::ALL {
                         let index = white_feature_index(king_sq, square, piece, color);
                         white_result[index] += 1;
                         let index = black_feature_index(king_sq, square, piece, color);

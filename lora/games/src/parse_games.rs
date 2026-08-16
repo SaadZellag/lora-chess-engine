@@ -10,7 +10,7 @@ use std::{
     time::Instant,
 };
 
-use chess::Board;
+use cozy_chess::Board;
 use rand::{thread_rng, Rng};
 
 use crate::utils::shared;
@@ -161,7 +161,7 @@ fn parse_lines(lines: Vec<String>) -> Vec<GameResult> {
                 _ => return None,
             };
 
-            let result = engine.best_move(board, &vec![])?;
+            let result = engine.best_move(board.clone(), &vec![])?;
 
             Some(GameResult {
                 board,

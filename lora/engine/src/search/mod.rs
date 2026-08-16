@@ -6,7 +6,7 @@ mod quiese;
 
 use std::rc::Rc;
 
-use chess::{Board, ChessMove, MoveGen, Piece};
+use cozy_chess::{Board, Move, Piece};
 
 use crate::{EngineOptions, Eval, LoraEngine, search::tt::TranspositionTable, MAX_DEPTH};
 
@@ -19,7 +19,7 @@ pub trait SearchHandler {
 #[derive(Debug, Clone)]
 pub struct SearchPosition {
     pub board: Board,
-    pub moves_played: Vec<ChessMove>,
+    pub moves_played: Vec<Move>,
 }
 
 #[derive(Debug, Clone)]
@@ -27,16 +27,16 @@ pub struct SearchOptions {
     pub max_depth: u8,
     pub max_nodes: u64,
     pub mate_search_depth: Option<u8>,
-    pub moves_to_search: Option<Vec<ChessMove>>,
+    pub moves_to_search: Option<Vec<Move>>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct SearchResult {
-    pub best_move: ChessMove,
+    pub best_move: Move,
     pub eval: Eval,
     pub stats: SearchStats,
     pub hashfull: usize,
-    pub pv: [ChessMove; MAX_DEPTH as usize],
+    pub pv: Vec<Move>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]

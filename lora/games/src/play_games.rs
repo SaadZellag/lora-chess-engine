@@ -9,7 +9,8 @@ use std::{
     time::Instant,
 };
 
-use chess::{Board, BoardStatus, ChessMove, MoveGen, Color};
+use common::cozy_chess::CozyChessHelper;
+use cozy_chess::{Board, Color, GameStatus, Move};
 use rand::{seq::SliceRandom, thread_rng};
 
 use crate::utils::{new_engine, GameResult};
@@ -107,26 +108,26 @@ pub fn play(options: GameOptions) {
 fn play_game(nodes: usize) -> GameResult {
     let start_pos = generate_board();
 
-    let mut board = start_pos;
+    let mut board = start_pos.clone();
     let mut moves = Vec::new();
     let mut history = Vec::new();
 
     let mut engine = new_engine(nodes);
 
-    while board.status() == BoardStatus::Ongoing {
+    while board.status() == GameStatus::Ongoing {
         if repetitions(&history, &board) >= 3 {
             break;
         }
 
-        if let Some(res) = engine.best_move(board, &history) {
+        if let Some(res) = engine.best_move(board.clone(), &history) {
             moves.push((res.best_move, res.eval));
-            board = board.make_move_new(res.best_move);
-            history.push(board.get_hash());
+            board.play_unchecked(res.best_move);
+            history.push(board.hash());
         } else {
             eprintln!(
                 "ERROR: Position |{}| with {} possible moves got no moves from the engine",
                 board.to_string(),
-                MoveGen::new_legal(&board).len()
+                board.legal_moves().len()
             );
             return play_game(nodes);
         }
@@ -138,9 +139,9 @@ fn play_game(nodes: usize) -> GameResult {
     }
 
     let winner = match board.status() {
-        BoardStatus::Ongoing => None, // Draw by repetition
-        BoardStatus::Stalemate => None,
-        BoardStatus::Checkmate => Some(!board.side_to_move()),
+        GameStatus::Ongoing => None, // Draw by repetition
+        GameStatus::Drawn => None,
+        GameStatus::Won => Some(!board.side_to_move()),
     };
 
     GameResult {
@@ -155,7 +156,7 @@ fn generate_board() -> Board {
     let mut board = Board::default();
 
     for _ in 0..DEPTH_START {
-        let moves: Vec<ChessMove> = MoveGen::new_legal(&board).collect();
+        let moves = board.legal_moves();
 
         if moves.is_empty() {
             return generate_board();
@@ -163,10 +164,10 @@ fn generate_board() -> Board {
 
         let mv = *moves.choose(&mut thread_rng()).unwrap();
 
-        board = board.make_move_new(mv);
+        board.play_unchecked(mv);
     }
 
-    if board.status() != BoardStatus::Ongoing {
+    if board.status() != GameStatus::Ongoing {
         return generate_board();
     }
 
@@ -179,6 +180,6 @@ fn repetitions(history: &[u64], board: &Board) -> usize {
         .rev()
         .step_by(2)
         .skip(1)
-        .filter(|&&hash| hash == board.get_hash())
+        .filter(|&&hash| hash == board.hash())
         .count()
 }

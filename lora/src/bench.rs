@@ -22,7 +22,7 @@ impl SearchHandler for BenchHandler {
     }
 
     fn should_stop(&self) -> bool {
-        self.prev_result
+        self.prev_result.as_ref()
             .map(|res| res.stats.depth >= DEPTH)
             .unwrap_or_default()
     }

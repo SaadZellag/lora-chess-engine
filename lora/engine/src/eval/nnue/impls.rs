@@ -1,11 +1,14 @@
 use crate::{
-    Eval, eval::nnue::{
+    Eval,
+    eval::nnue::{
         EVALUATOR, NNUE, NNUEAccumulator,
         activations::CRELU,
         vectors::{fast_vadd, fast_vsub},
-    }, nnue_conf::L1,
+    },
+    nnue_conf::L1,
 };
-use chess::{Board, ChessMove, Color, Piece, Square};
+use common::cozy_chess::CozyChessHelper;
+use cozy_chess::{Board, Move, Color, Piece, Square};
 use std::ops::{Index, IndexMut};
 
 impl Index<Color> for NNUEAccumulator {
@@ -32,8 +35,6 @@ impl NNUE {
     pub fn eval(&self, acc: &NNUEAccumulator, stm: Color) -> Eval {
         let mut input = [0; { L1 * 2 }];
 
-
-        
         for i in 0..L1 {
             input[i] = acc[stm][i].into();
         }
@@ -87,10 +88,11 @@ impl NNUEAccumulator {
         self[color] = fast_vsub(&self[color], &EVALUATOR.ft.weights[index]);
     }
 
-    pub fn update(&self, initial_board: &Board, final_board: &Board, mv: ChessMove) -> Self {
-        debug_assert_eq!(&initial_board.make_move_new(mv), final_board);
+    pub fn update(&self, initial_board: &Board, final_board: &Board, mv: Move) -> Self {
+    
+        debug_assert_eq!(&initial_board.play_unchecked_new(mv), final_board);
         let piece_moving = initial_board
-            .piece_on(mv.get_source())
+            .piece_on(mv.from)
             .expect("Invalid move for board");
 
         // Since our feature set may be halfkp, any move by the king may
@@ -102,11 +104,11 @@ impl NNUEAccumulator {
 
         let mut result = *self;
 
-        let white_king = initial_board.king_square(Color::White);
-        let black_king = initial_board.king_square(Color::Black);
+        let white_king = initial_board.king(Color::White);
+        let black_king = initial_board.king(Color::Black);
 
-        let from = mv.get_source();
-        let to = mv.get_dest();
+        let from = mv.from;
+        let to = mv.to;
         let stm = initial_board.side_to_move();
 
         let piece_captured = initial_board.piece_on(to);
@@ -131,7 +133,7 @@ impl NNUEAccumulator {
         result.remove_feature(black_index, Color::Black);
 
         // Promotion
-        let piece_at_destination = match mv.get_promotion() {
+        let piece_at_destination = match mv.promotion {
             Some(piece) => piece,
             None => piece_moving,
         };
@@ -146,11 +148,11 @@ impl NNUEAccumulator {
         // En Passant
         // If pawn moved in diagonal and it ate nothing
         let en_passant = piece_moving == Piece::Pawn
-            && from.get_file() != to.get_file()
+            && from.file() != to.file()
             && piece_captured.is_none();
 
         if en_passant {
-            let square = Square::make_square(from.get_rank(), to.get_file());
+            let square = Square::new(to.file(), from.rank());
             // Removing pawn
             // Adding to square
             let white_index = features::white_feature_index(white_king, square, Piece::Pawn, !stm);
@@ -166,16 +168,17 @@ impl NNUEAccumulator {
 
 #[cfg(test)]
 mod tests {
+    use common::cozy_chess::CozyChessHelper;
+
     use crate::{eval::nnue::NNUEAccumulator, util::positiongen::PositionGenerator};
 
     #[test]
     fn test_acc_update() {
-        use chess::MoveGen;
         for board in PositionGenerator::new().take(1000) {
             let acc = NNUEAccumulator::new(&board);
 
-            for mv in MoveGen::new_legal(&board) {
-                let new_board = board.make_move_new(mv);
+            for mv in board.legal_moves() {
+                let new_board = board.play_unchecked_new(mv);
                 let new_acc = acc.update(&board, &new_board, mv);
 
                 assert_eq!(

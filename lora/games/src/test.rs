@@ -4,7 +4,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use chess::{Board, Color, MoveGen};
+use common::cozy_chess::CozyChessHelper;
+use cozy_chess::{Board, Color};
 use engine::{Eval, EVALUATOR, NNUEAccumulator};
 use features::FEATURES_PER_SIDE;
 use games::binpack::{BinPackReader, BinPackWriter};
@@ -23,10 +24,10 @@ pub fn test(binpack_file: &str) {
         EVALUATOR.eval(&accumulator, board.side_to_move())
     );
 
-    let moves = vec![(MoveGen::new_legal(&board).next().unwrap(), Eval::CentiPawn(50))];
+    let moves = vec![(board.legal_moves().pop().unwrap(), Eval::CentiPawn(50))];
 
     let result = GameResult {
-        board,
+        board: board.clone(),
         moves,
         winner: None,
     };

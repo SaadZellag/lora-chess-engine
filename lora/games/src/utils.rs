@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use chess::{Board, ChessMove, Color};
+use cozy_chess::{Board, Move, Color};
 
 use engine::{Eval, SearchHandler, SearchResult, SearchPosition, SearchOptions, TranspositionTable, LoraEngine};
 use features::FEATURES_PER_SIDE;
@@ -26,7 +26,7 @@ pub struct TrainingDataEntry {
     pub eval: i32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct TrainingDataPosition {
     pub board: Board,
     pub winner: Option<Color>,
@@ -73,14 +73,14 @@ impl Into<TrainingDataEntry> for TrainingDataPosition {
 
 pub struct GameResult {
     pub board: Board,
-    pub moves: Vec<(ChessMove, Eval)>,
+    pub moves: Vec<(Move, Eval)>,
     pub winner: Option<Color>,
 }
 
 impl GameResult {
     pub fn to_bin(&self, seen: Arc<Mutex<HashSet<u64>>>) -> Vec<u8> {
         let mut result = Vec::with_capacity(self.moves.len() * ENTRY_SIZE_BYTES);
-        let mut curr_board = self.board;
+        let mut curr_board = self.board.clone();
 
         for (mv, eval) in &self.moves {
             let mut add = true;
@@ -89,14 +89,14 @@ impl GameResult {
             add &= matches!(eval, Eval::CentiPawn(_));
 
             // Dont add replicates
-            add &= seen.lock().unwrap().insert(curr_board.get_hash());
+            add &= seen.lock().unwrap().insert(curr_board.hash());
 
             // Dont add checks
-            add &= curr_board.checkers().popcnt() == 0;
+            add &= curr_board.checkers().len() == 0;
 
             if add {
                 let position = TrainingDataPosition {
-                    board: curr_board,
+                    board: curr_board.clone(),
                     eval: *eval,
                     winner: self.winner,
                 };
@@ -104,8 +104,8 @@ impl GameResult {
                 result.append(&mut bincode::serialize(&entry).unwrap())
             }
 
-            if curr_board.legal(*mv) {
-                curr_board = curr_board.make_move_new(*mv);
+            if curr_board.is_legal(*mv) {
+                curr_board.play_unchecked(*mv);
             } else {
                 break;
             }
@@ -141,7 +141,7 @@ impl SearchHandler for GameHandler {
     }
 
     fn should_stop(&self) -> bool {
-        self.prev_result
+        self.prev_result.as_ref()
             .map(|res| res.stats.nodes_visited >= self.max_nodes)
             .unwrap_or_default()
     }
@@ -194,7 +194,7 @@ pub fn new_engine(nodes: usize) -> GameEngine {
 
 #[test]
 fn test_conversion() {
-    use chess::{Color, Board};
+    use cozy_chess::{Color, Board};
     
     let board = Board::default();
     let position = TrainingDataPosition {

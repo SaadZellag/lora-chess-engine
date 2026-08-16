@@ -1,9 +1,10 @@
 use crate::{
     Eval, eval::nnue::{EVALUATOR, NNUEAccumulator}, search::move_ordering::OrderedMoveGen,
 };
-use chess::{Board, BoardStatus, ChessMove};
+use common::cozy_chess::CozyChessHelper;
+use cozy_chess::{Board, GameStatus, Move};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Position {
     board: Board,
     acc: NNUEAccumulator,
@@ -33,11 +34,11 @@ impl Position {
     }
 
     pub fn possible_captures(&self) -> OrderedMoveGen {
-        OrderedMoveGen::with_mask(&self.board, *self.board.combined())
+        OrderedMoveGen::with_mask(&self.board, self.board.occupied())
     }
 
-    pub fn make_move(&self, mv: ChessMove) -> Self {
-        let new_board = self.board.make_move_new(mv);
+    pub fn make_move(&self, mv: Move) -> Self {
+        let new_board = self.board.play_unchecked_new(mv);
 
         let acc = self.acc.update(&self.board, &new_board, mv);
         Self {
@@ -57,9 +58,9 @@ impl Position {
 
     pub fn eval(&self) -> Eval {
         match self.board.status() {
-            BoardStatus::Ongoing => {}
-            BoardStatus::Stalemate => return Eval::NEUTRAL,
-            BoardStatus::Checkmate => return Eval::MatedIn(self.ply.into()),
+            GameStatus::Ongoing => {}
+            GameStatus::Drawn => return Eval::NEUTRAL,
+            GameStatus::Won => return Eval::MatedIn(self.ply.into()),
         };
 
         EVALUATOR.eval(&self.acc, self.board.side_to_move())

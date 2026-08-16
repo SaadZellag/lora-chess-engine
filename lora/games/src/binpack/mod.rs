@@ -1,6 +1,6 @@
 use std::{fmt::Debug, io::{Read, Seek, Write}, str::FromStr};
 
-use chess::{Board, ChessMove, Square};
+use cozy_chess::{Board, Move, Square};
 use engine::Eval;
 use sfbinpack::{CompressedReaderError, CompressedTrainingDataEntryReader, CompressedTrainingDataEntryWriter, CompressedWriterError, chess::r#move::MoveType};
 
@@ -15,10 +15,10 @@ pub enum GameResult {
     Draw,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct TrainingEntry {
     pub board: Board,
-    pub move_played: ChessMove,
+    pub move_played: Move,
     pub eval: Eval,
     pub ply: u16,
     pub result: GameResult,
@@ -28,7 +28,7 @@ pub struct TrainingEntry {
 pub struct GameEntry {
     pub startpos: Board,
     pub startply: u16,
-    pub moves: Vec<(ChessMove, Eval)>,
+    pub moves: Vec<(Move, Eval)>,
     pub result: GameResult,
 }
 
@@ -67,10 +67,10 @@ impl<T: Read + Seek> BinPackReader<T> {
         let to_square = Square::from_str(&mv_uci[2..4]).map_err(|e| anyhow::anyhow!("{e:?}"))?;
         let promotion = if mv_uci.len() == 5 {
             match &mv_uci[4..5] {
-                "q" => Some(chess::Piece::Queen),
-                "r" => Some(chess::Piece::Rook),
-                "b" => Some(chess::Piece::Bishop),
-                "n" => Some(chess::Piece::Knight),
+                "q" => Some(cozy_chess::Piece::Queen),
+                "r" => Some(cozy_chess::Piece::Rook),
+                "b" => Some(cozy_chess::Piece::Bishop),
+                "n" => Some(cozy_chess::Piece::Knight),
                 _ => None,
             }
         } else {
@@ -85,7 +85,11 @@ impl<T: Read + Seek> BinPackReader<T> {
         };
 
 
-        let mv = ChessMove::new(from_square, to_square, promotion);
+        let mv = Move {
+            from: from_square,
+            to: to_square,
+            promotion,
+        };
 
         Ok(TrainingEntry {
             board,
@@ -136,7 +140,7 @@ impl<T: Write> BinPackWriter<T> {
 
             self.write_entry(&entry)?;
 
-            board = board.make_move_new(*mv);
+            board.play_unchecked(*mv);
         }
 
         Ok(())
@@ -150,26 +154,26 @@ impl<T: Write> BinPackWriter<T> {
         let entry_board = sfbinpack::chess::position::Position::from_fen(&fen).map_err(|e| anyhow::anyhow!("{e:?}"))?;
 
 
-        let src = chess_square_to_sbin_square(entry.move_played.get_source());
-        let mut dest = chess_square_to_sbin_square(entry.move_played.get_dest());
-        let promotion = entry.move_played.get_promotion().map(|piece| {
-            let color = entry.board.color_on(entry.move_played.get_source()).unwrap();
+        let src = chess_square_to_sbin_square(entry.move_played.from);
+        let mut dest = chess_square_to_sbin_square(entry.move_played.to);
+        let promotion = entry.move_played.promotion.map(|piece| {
+            let color = entry.board.color_on(entry.move_played.from).unwrap();
             chess_piece_to_sbin_piece(piece, color)
         }).unwrap_or(sfbinpack::chess::piece::Piece::NONE);
 
         let mv_type;
-        if entry.move_played.get_promotion().is_some() {
+        if entry.move_played.promotion.is_some() {
             mv_type = MoveType::Promotion;
-        } else if entry.board.piece_on(entry.move_played.get_source()) == Some(chess::Piece::King) && (entry.move_played.get_source().get_file() as i8 - entry.move_played.get_dest().get_file() as i8).abs() > 1 {
+        } else if entry.board.piece_on(entry.move_played.from) == Some(cozy_chess::Piece::King) && (entry.move_played.from.file() as i8 - entry.move_played.to.file() as i8).abs() > 1 {
             mv_type = MoveType::Castle;
-            dest = chess_square_to_sbin_square(match entry.move_played.get_dest() {
+            dest = chess_square_to_sbin_square(match entry.move_played.to {
                 Square::G1 => Square::H1,
                 Square::C1 => Square::A1,
                 Square::G8 => Square::H8,
                 Square::C8 => Square::A8,
-                _ => entry.move_played.get_dest(),
+                _ => entry.move_played.to,
             })
-        } else if entry.board.en_passant() == Some(entry.move_played.get_dest()) && entry.board.piece_on(entry.move_played.get_source()) == Some(chess::Piece::Pawn) {
+        } else if entry.board.en_passant() == Some(entry.move_played.to.file()) && entry.board.piece_on(entry.move_played.from) == Some(cozy_chess::Piece::Pawn) {
             mv_type = MoveType::EnPassant;
         } else {
             mv_type = MoveType::Normal;
@@ -183,7 +187,7 @@ impl<T: Write> BinPackWriter<T> {
             GameResult::WhiteWins => 1,
             GameResult::Draw => 0,
             GameResult::BlackWins => -1,
-        } * if entry.board.side_to_move() == chess::Color::White { 1 } else { -1 };
+        } * if entry.board.side_to_move() == cozy_chess::Color::White { 1 } else { -1 };
 
         let sbin_entry = sfbinpack::TrainingDataEntry {
             pos: entry_board,
@@ -193,7 +197,7 @@ impl<T: Write> BinPackWriter<T> {
             result,
         };
 
-        // println!("{} {} {:?} {:?}", fen, entry.move_played, result_move, entry.move_played.get_promotion());
+        // println!("{} {} {:?} {:?}", fen, entry.move_played, result_move, entry.move_played.promotion);
 
         self.writer.write_entry(&sbin_entry).map_err(|e| anyhow::anyhow!("{e:?}"))?;
 
@@ -204,8 +208,8 @@ impl<T: Write> BinPackWriter<T> {
 
 #[cfg(test)]
 mod tests {
-    use chess::MoveGen;
-    use rand::Rng;
+    use common::cozy_chess::CozyChessHelper;
+use rand::Rng;
     use tempfile::{NamedTempFile, tempdir};
 
 use super::*;
@@ -219,14 +223,14 @@ use super::*;
         let mut moves = Vec::new();
 
         for i in 0..20 {
-            let legal_moves: Vec<ChessMove> = MoveGen::new_legal(&board).collect();
+            let legal_moves = board.legal_moves();
             if legal_moves.is_empty() {
                 break;
             }
             let mv = legal_moves[rng.gen_range(0..legal_moves.len())];
             let eval = Eval::CentiPawn(i * 10);
             moves.push((mv, eval));
-            board = board.make_move_new(mv);
+            board = board.play_unchecked_new(mv);
         }
 
         let game_entry = GameEntry {

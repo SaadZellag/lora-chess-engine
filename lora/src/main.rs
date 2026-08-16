@@ -1,87 +1,86 @@
 mod bench;
 
-use chess::{Board, ChessMove};
-use chrono::TimeDelta;
+use cozy_chess::{Board, Move};
+use cozy_uci::{UciFormatOptions, command::{UciCommand, UciGoParams}, remark::{UciRemark, UciIdInfo, UciInfo, UciScore, UciScoreKind}};
 use engine::{LoraEngine, SearchOptions, SearchPosition, SearchResult, Eval, TranspositionTable};
 use std::{
-    io::{BufRead, Write, stdin}, println, rc::Rc, str::FromStr,
+    io::{BufRead, Write, stdin},
     sync::{Arc, atomic::AtomicBool},
     time::{Instant, Duration},
 };
 
-use vampirc_uci::{UciInfoAttribute, UciMessage, UciOptionConfig, UciTimeControl, parse};
 
-fn print_message(msg: UciMessage) {
-    println!("{}", msg);
+fn print_remark(remark: UciRemark, options: &UciFormatOptions) {
+    println!("{}", remark.format(options));
     std::io::stdout().flush().unwrap();
 }
 
-fn calculate_time_to_think(position: &SearchPosition, time_control: &Option<UciTimeControl>) -> Duration {
-    match time_control {
-        Some(UciTimeControl::MoveTime(move_time)) => {
-            move_time.to_std().unwrap_or(Duration::from_secs(5))
-        }
-        Some(UciTimeControl::TimeLeft {
-            white_time,
-            black_time,
-            white_increment,
-            black_increment,
-            ..
-        }) => {
-            // Apply moves to get current board state
-            let mut current_board = position.board;
-            for mv in &position.moves_played {
-                current_board = current_board.make_move_new(*mv);
-            }
-            
-            let side = current_board.side_to_move();
-            let our_time = if side == chess::Color::White {
-                white_time
-            } else {
-                black_time
-            };
-            let our_increment = if side == chess::Color::White {
-                white_increment
-            } else {
-                black_increment
-            };
-
-            let mut time_to_use = Duration::ZERO;
-
-            // 5% of remaining time
-            if let Some(time) = our_time {
-                let remaining_ms = time.num_milliseconds().max(0) as u64;
-                time_to_use = time_to_use + Duration::from_millis(remaining_ms / 20);
-            }
-
-            // 50% of increment
-            if let Some(inc) = our_increment {
-                let inc_ms = inc.num_milliseconds().max(0) as u64;
-                time_to_use = time_to_use + Duration::from_millis(inc_ms / 2);
-            }
-
-            time_to_use
-        }
-        Some(UciTimeControl::Infinite) | Some(UciTimeControl::Ponder) => {
-            Duration::from_secs(31_557_600) // ~1 year
-        }
-        None => Duration::from_secs(5), // Default fallback
+fn calculate_time_to_think(position: &SearchPosition, go_params: &UciGoParams) -> Duration {
+    // If there's a specific move time, use that
+    if let Some(movetime) = go_params.movetime {
+        return movetime;
     }
+
+    // If infinite, use a very large time
+    if go_params.infinite {
+        return Duration::from_secs(31_557_600); // ~1 year
+    }
+
+    // Determine whose turn it is based on number of moves played
+    // Even number of moves => white's turn, odd => black's turn
+    let is_white_to_move = position.moves_played.len() % 2 == 0;
+    
+    let our_time = if is_white_to_move {
+        go_params.wtime
+    } else {
+        go_params.btime
+    };
+    let our_increment = if is_white_to_move {
+        go_params.winc
+    } else {
+        go_params.binc
+    };
+
+    let mut time_to_use = Duration::ZERO;
+
+    // 5% of remaining time
+    if let Some(time) = our_time {
+        time_to_use = time_to_use + Duration::from_millis(time.as_millis() as u64 / 20);
+    }
+
+    // 50% of increment
+    if let Some(inc) = our_increment {
+        time_to_use = time_to_use + Duration::from_millis(inc.as_millis() as u64 / 2);
+    }
+
+    // Default fallback
+    if time_to_use == Duration::ZERO {
+        time_to_use = Duration::from_secs(5);
+    }
+
+    time_to_use
 }
 
-fn print_options() {
-    print_message(UciMessage::Option(UciOptionConfig::Spin {
+fn print_options(options: &UciFormatOptions) {
+    use cozy_uci::remark::UciOptionInfo;
+    
+    print_remark(UciRemark::Option {
         name: "Hash".to_string(),
-        default: Some(1),
-        min: Some(1),
-        max: Some(1024),
-    }));
-    print_message(UciMessage::Option(UciOptionConfig::Spin {
+        info: UciOptionInfo::Spin {
+            default: 1,
+            min: 1,
+            max: 1024,
+        },
+    }, options);
+    
+    print_remark(UciRemark::Option {
         name: "Threads".to_string(),
-        default: Some(1),
-        min: Some(1),
-        max: Some(1),
-    }));
+        info: UciOptionInfo::Spin {
+            default: 1,
+            min: 1,
+            max: 1,
+        },
+    }, options);
 }
 
 #[derive(Clone)]
@@ -90,44 +89,64 @@ struct UCIHandler {
     time_allowed: Duration,
     abort_flag: Arc<AtomicBool>,
     last_result: Option<SearchResult>,
+    uci_options: UciFormatOptions,
 }
 
 impl engine::SearchHandler for UCIHandler {
     fn new_result(&mut self, result: engine::SearchResult) {
-        let depth = UciInfoAttribute::Depth(result.stats.depth);
-        let sel_depth = UciInfoAttribute::SelDepth(result.stats.sel_depth);
-        let std_duration = self.start.elapsed();
-        let time_delta = TimeDelta::from_std(std_duration).expect("duration out of bounds");
+        let elapsed = self.start.elapsed();
+        let nodes = result.stats.nodes_visited;
+        let nps = (nodes as f64 / elapsed.as_secs_f64()) as u64;
 
-        let time = UciInfoAttribute::Time(time_delta);
-        let nodes = UciInfoAttribute::Nodes(result.stats.nodes_visited);
         let score = match result.eval {
-            Eval::MateIn(x) => UciInfoAttribute::from_mate(x as i8),
-            Eval::MatedIn(x) => UciInfoAttribute::from_mate(-(x as i8)),
-            Eval::CentiPawn(x) => UciInfoAttribute::from_centipawns(x as i32),
+            Eval::MateIn(x) => UciScore {
+                cp: None,
+                mate: Some(x as i32),
+                wdl: None,
+                kind: UciScoreKind::Exact,
+            },
+            Eval::MatedIn(x) => UciScore {
+                cp: None,
+                mate: Some(-(x as i32)),
+                wdl: None,
+                kind: UciScoreKind::Exact,
+            },
+            Eval::CentiPawn(x) => UciScore {
+                cp: Some(x as i32),
+                mate: None,
+                wdl: None,
+                kind: UciScoreKind::Exact,
+            },
         };
-        let curr_move = UciInfoAttribute::CurrMove(result.best_move);
-        let nps = {
-            let delta = self.start.elapsed();
-            let nodes = result.stats.nodes_visited;
-            let nps = (nodes as f64 / delta.as_secs_f64()) as u64;
-            UciInfoAttribute::Nps(nps)
-        };
-        let tbl_hits = UciInfoAttribute::TbHits(result.stats.tbl_hits);
-        let hashfull = UciInfoAttribute::HashFull(result.hashfull as u16);
-        let pv = UciInfoAttribute::Pv(
-            result
-                .pv
-                .iter()
-                .cloned()
-                .take_while(|&e| e != ChessMove::default())
-                .collect(),
-        );
 
-        let attributes = vec![
-            depth, sel_depth, time, nodes, score, curr_move, nps, tbl_hits, hashfull, pv,
-        ];
-        print_message(UciMessage::Info(attributes));
+        let pv: Vec<Move> = result
+            .pv
+            .iter()
+            .cloned()
+            .collect();
+
+        let info = UciInfo {
+            depth: Some(result.stats.depth as u32),
+            seldepth: Some(result.stats.sel_depth as u32),
+            time: Some(elapsed),
+            nodes: Some(nodes),
+            pv: if pv.is_empty() { None } else { Some(pv) },
+            multipv: None,
+            score: Some(score),
+            currmove: Some(result.best_move),
+            currmovenumber: None,
+            hashfull: Some(result.hashfull as u16),
+            nps: Some(nps),
+            tbhits: Some(result.stats.tbl_hits),
+            sbhits: None,
+            cpuload: None,
+            string: None,
+            refutation: None,
+            currline: None,
+        };
+
+        print_remark(UciRemark::Info(info), &self.uci_options);
+        self.last_result = Some(result);
     }
 
     fn should_stop(&self) -> bool {
@@ -154,116 +173,110 @@ fn main() {
     let stdin = stdin();
     let lines = stdin.lock().lines().map(|l| l.unwrap_or_default());
 
+    let options = UciFormatOptions::default();
+
     'outer: for line in lines {
-        for msg in parse(&line) {
-            match msg {
-                UciMessage::Uci => {
-                    print_message(UciMessage::Id {
-                        name: Some(format!(
+        // Parse the UCI command
+        match UciCommand::parse_from(&line, &options) {
+            Ok(cmd) => {
+                match cmd {
+                    UciCommand::Uci => {
+                        print_remark(UciRemark::Id(UciIdInfo::Name(format!(
                             "Lora {} hash {}",
                             env!("CARGO_PKG_VERSION"),
                             env!("GIT_HASH")
-                        )),
-                        author: None,
-                    });
-                    print_message(UciMessage::Id {
-                        name: None,
-                        author: Some("Saad2442".to_string()),
-                    });
-                    print_options();
-                    print_message(UciMessage::UciOk);
-                }
-
-                UciMessage::Debug(_) => {
-                    print_message(UciMessage::info_string("Debug not supported".to_string()));
-                }
-
-                UciMessage::IsReady => print_message(UciMessage::ReadyOk),
-
-                UciMessage::Position {
-                    startpos,
-                    fen,
-                    moves,
-                } => {
-                    if startpos {
-                        position.board = Board::default();
-                    } else if let Some(fen_str) = fen {
-                        if let Ok(parsed) = Board::from_str(&fen_str.0) {
-                            position.board = parsed;
-                        }
+                        ))), &options);
+                        print_remark(UciRemark::Id(UciIdInfo::Author("Saad2442".to_string())), &options);
+                        print_options(&options);
+                        print_remark(UciRemark::UciOk, &options);
                     }
 
-                    position.moves_played = moves;
+                    UciCommand::Debug(_) => {
+                        // Debug not implemented
+                    }
 
-                }
+                    UciCommand::IsReady => {
+                        print_remark(UciRemark::ReadyOk, &options);
+                    }
 
-                UciMessage::SetOption { name, value } => match name.to_lowercase().as_ref() {
-                    "hash" => {
-                        if let Some(val) = value {
-                            if let Ok(size_mb) = val.parse::<usize>() {
-                                engine.set_hash_size(size_mb);
-                                transposition_table = TranspositionTable::new(engine.options.tt_size_bytes);
+                    UciCommand::Position { init_pos, moves } => {
+                        position.board = init_pos.into();
+                        position.moves_played = moves;
+                    }
+
+                    UciCommand::SetOption { name, value } => match name.to_lowercase().as_ref() {
+                        "hash" => {
+                            if let Some(val) = value {
+                                if let Ok(size_mb) = val.parse::<usize>() {
+                                    engine.set_hash_size(size_mb);
+                                    transposition_table = TranspositionTable::new(engine.options.tt_size_bytes);
+                                }
                             }
                         }
+                        "threads" => {
+                            // Ignore - single threaded only
+                        }
+                        _ => {}
+                    },
+
+                    UciCommand::UciNewGame => {
+                        position.board = Board::default();
+                        position.moves_played.clear();
+                        abort_flag.store(false, std::sync::atomic::Ordering::Relaxed);
+                        transposition_table = TranspositionTable::new(engine.options.tt_size_bytes);
                     }
-                    "threads" => {
-                        // Ignore - single threaded only
+
+                    UciCommand::Stop => {
+                        abort_flag.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
-                    _ => {}
-                },
 
-                UciMessage::UciNewGame => {
-                    position.board = Board::default();
-                    position.moves_played.clear();
-                    abort_flag.store(false, std::sync::atomic::Ordering::Relaxed);
-                    transposition_table = TranspositionTable::new(engine.options.tt_size_bytes);
-                }
+                    UciCommand::PonderHit => {
+                        // PonderHit not supported
+                    }
 
-                UciMessage::Stop => {
-                    abort_flag.store(true, std::sync::atomic::Ordering::Relaxed);
-                }
+                    UciCommand::Go(go_params) => {
+                        let time_allowed = calculate_time_to_think(&position, &go_params);
+                        
+                        let mut search_options = SearchOptions::new();
+                        
+                        if let Some(depth) = go_params.depth {
+                            search_options.max_depth = depth.min(255) as u8;
+                        }
+                        if let Some(nodes) = go_params.nodes {
+                            search_options.max_nodes = nodes;
+                        }
+                        if let Some(mate) = go_params.mate {
+                            search_options.mate_search_depth = Some(mate.min(255) as u8);
+                        }
+                        if let Some(moves) = go_params.searchmoves {
+                            if !moves.is_empty() {
+                                search_options.moves_to_search = Some(moves);
+                            }
+                        }
 
-                UciMessage::PonderHit => {
-                    print_message(UciMessage::info_string(
-                        "PonderHit not supported".to_string(),
-                    ));
-                }
-
-                UciMessage::Go { search_control, time_control  } => {
-                    let mut search_options = SearchOptions::new();
-                    if let Some(control) = search_control {
-                        search_options.max_depth = control.depth.unwrap_or(search_options.max_depth);
-                        search_options.max_nodes = control.nodes.unwrap_or(search_options.max_nodes);
-                        search_options.mate_search_depth = control.mate;
-                        search_options.moves_to_search = if control.search_moves.is_empty() {
-                            None
-                        } else {
-                            Some(control.search_moves)
+                        let mut handler = UCIHandler {
+                            start: Instant::now(),
+                            time_allowed,
+                            abort_flag: abort_flag.clone(),
+                            last_result: None,
+                            uci_options: options.clone(),
                         };
+
+                        if let Some(result) = engine.search(position.clone(), search_options, &mut handler, &mut transposition_table) {
+                            print_remark(UciRemark::BestMove {
+                                mv: result.best_move,
+                                ponder: None,
+                            }, &options);
+                        }
                     }
 
-                    let time_allowed = calculate_time_to_think(&position, &time_control);
-                    
-                    let mut handler = UCIHandler {
-                        start: Instant::now(),
-                        time_allowed,
-                        abort_flag: abort_flag.clone(),
-                        last_result: None,
-                    };
-
-                    if let Some(result) = engine.search(position.clone(), search_options, &mut handler, &mut transposition_table) {
-                        print_message(UciMessage::BestMove {
-                            best_move: result.best_move,
-                            ponder: None,
-                        });
-                    } else {
-                        print_message(UciMessage::info_string("No move found".to_string()));
+                    UciCommand::Quit => {
+                        break 'outer;
                     }
-                },
-                UciMessage::Quit => {
-                    break 'outer;
                 }
-                _ => {}
+            }
+            Err(_) => {
+                // Silently ignore parse errors for now
             }
         }
     }

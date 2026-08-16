@@ -8,7 +8,8 @@ edition = "2021"
 [dependencies]
 engine = {path = "../engine"}
 features = {path = "../features"}
-chess = "3.2.0"
+common = {path = "../common"}
+cozy-chess = "0.3.4"
 rand = "0.8.5"
 rayon = "1.5.3"
 bytemuck = "1.12.1"

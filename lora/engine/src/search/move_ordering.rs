@@ -1,11 +1,11 @@
 use arrayvec::ArrayVec;
-use chess::{BitBoard, Board, ChessMove, EMPTY, MoveGen, NUM_PIECES};
+use cozy_chess::{BitBoard, Board, Move, Piece};
 
 use crate::util::positiongen::PositionGenerator;
 
 // victim attacker
 // King should NEVER be a victim
-const MVV_LVA: [[i32; NUM_PIECES]; NUM_PIECES - 1] = [
+const MVV_LVA: [[i32; Piece::NUM]; Piece::NUM - 1] = [
     [9, 8, 7, 6, 5, 4],       // Pawn
     [19, 18, 17, 16, 15, 14], // Knight
     [29, 28, 27, 26, 25, 24], // Bishop
@@ -13,10 +13,10 @@ const MVV_LVA: [[i32; NUM_PIECES]; NUM_PIECES - 1] = [
     [49, 48, 47, 46, 45, 44], // Queen
 ];
 
-fn score_move(board: &Board, mv: ChessMove) -> i32 {
+fn score_move(board: &Board, mv: Move) -> i32 {
     // MVV-LVA
-    let attacker = board.piece_on(mv.get_source()).expect("Invalid board");
-    let victim = board.piece_on(mv.get_dest());
+    let attacker = board.piece_on(mv.from).expect("Invalid board");
+    let victim = board.piece_on(mv.to);
 
     if let Some(victim) = victim {
         MVV_LVA[victim as usize][attacker as usize]
@@ -26,45 +26,44 @@ fn score_move(board: &Board, mv: ChessMove) -> i32 {
 }
 
 pub struct OrderedMoveGen {
-    moves: ArrayVec<ChessMove, 218>,
+    moves: ArrayVec<Move, 218>,
 }
 
 impl OrderedMoveGen {
     pub fn new(board: &Board) -> Self {
-        Self::with_mask(board, !chess::EMPTY)
+        Self::with_mask(board, !BitBoard::EMPTY)
     }
 
     pub fn with_mask(board: &Board, mask: BitBoard) -> Self {
-        let mut itt = MoveGen::new_legal(board);
-        itt.set_iterator_mask(mask);
+        let mut all_moves = ArrayVec::new();
 
-        let mut moves = ArrayVec::new();
-
-        for mv in itt {
-            moves.push(mv);
-        }
-
-        moves.reverse();
+        board.generate_moves_for(mask, |moves| {
+            for _mv in moves {
+                all_moves.push(_mv);
+            }
+            false
+        });
 
         // Best moves have higher value and we want them last
         // Using pop() to get the moves
-        moves.sort_by_cached_key(|mv| score_move(board, *mv));
+        all_moves.sort_by_cached_key(|mv| score_move(board, *mv));
 
-        Self { moves }
+        Self { moves: all_moves }
     }
 
-    pub fn remove_move(&mut self, mv: ChessMove) {
+    pub fn remove_move(&mut self, mv: Move) {
         self.moves.retain(|m| m != &mv);
     }
 
     pub fn allow_only(&mut self, mask: BitBoard) {
+
         self.moves
-            .retain(|mv| BitBoard::from_square(mv.get_dest()) & mask != EMPTY)
+            .retain(|mv| mv.to.bitboard() & mask != BitBoard::EMPTY)
     }
 }
 
 impl Iterator for OrderedMoveGen {
-    type Item = <MoveGen as Iterator>::Item;
+    type Item = Move;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.moves.pop()
@@ -87,12 +86,18 @@ mod tests {
         // To make sure that the ordered movegen generates the same amount of moves as the normal one
 
         for board in PositionGenerator::new().take(100) {
-            let movegen_moves = chess::MoveGen::new_legal(&board);
+            let mut movegen_moves = vec![];
+            board.generate_moves(|moves| {
+                for _mv in moves {
+                    movegen_moves.push(_mv);
+                }
+                false
+            });
             let orderedmovegen_moves = OrderedMoveGen::new(&board);
 
             assert_eq!(movegen_moves.len(), orderedmovegen_moves.len());
             assert_eq!(
-                movegen_moves.into_iter().collect::<Vec<_>>().len(),
+                movegen_moves.len(),
                 orderedmovegen_moves.into_iter().collect::<Vec<_>>().len()
             );
         }
