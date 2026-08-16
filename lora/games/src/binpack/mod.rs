@@ -2,7 +2,7 @@ use std::{fmt::Debug, io::{Read, Seek, Write}, str::FromStr};
 
 use chess::{Board, ChessMove, Square};
 use engine::Eval;
-use sfbinpack::{CompressedReaderError, CompressedTrainingDataEntryReader, CompressedTrainingDataEntryWriter, CompressedWriterError, TrainingDataEntry, chess::r#move::{Move, MoveType}};
+use sfbinpack::{CompressedReaderError, CompressedTrainingDataEntryReader, CompressedTrainingDataEntryWriter, CompressedWriterError, chess::r#move::MoveType};
 
 use crate::binpack::convert::{chess_piece_to_sbin_piece, chess_square_to_sbin_square, eval_to_stockfish_eval, stockfish_eval_to_eval};
 
@@ -143,6 +143,9 @@ impl<T: Write> BinPackWriter<T> {
     }
 
     pub fn write_entry(&mut self, entry: &TrainingEntry) -> anyhow::Result<()> {
+        // TODO: The FEN of the board always has half move and full move set to 0 1 which causes issues with the writer
+        // You need to instead use the FEN only for startpos and then use the questionable library's playing of moves
+        // Tbh might just rewrie the binpack reader and writer to use the chess library instead of this
         let fen = format!("{}", entry.board);
         let entry_board = sfbinpack::chess::position::Position::from_fen(&fen).map_err(|e| anyhow::anyhow!("{e:?}"))?;
 
@@ -199,14 +202,14 @@ impl<T: Write> BinPackWriter<T> {
 }
 
 
+#[cfg(test)]
 mod tests {
     use chess::MoveGen;
-use rand::Rng;
-use tempfile::{NamedTempFile, tempdir, tempfile};
+    use rand::Rng;
+    use tempfile::{NamedTempFile, tempdir};
 
 use super::*;
     use std::fs::File;
-    use std::io::{BufReader, BufWriter};
 
     #[test]
     fn test_binpack_write_then_read() {

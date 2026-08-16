@@ -143,7 +143,7 @@ pub fn parse(options: ParseOptions) {
 }
 
 fn parse_lines(lines: Vec<String>) -> Vec<GameResult> {
-    let mut engine = new_engine(Board::default(), vec![]);
+    let mut engine = new_engine(40_000);
 
     lines
         .iter()

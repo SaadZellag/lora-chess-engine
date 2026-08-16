@@ -13,6 +13,7 @@ mod play_games;
 mod test;
 mod utils;
 mod bench;
+mod binpack;
 
 #[derive(Parser)]
 #[command(name = "games")]
@@ -31,9 +32,17 @@ enum Commands {
         #[arg(value_name = "NUM")]
         num_positions: usize,
 
+        /// Number of nodes to search per move (optional, defaults to 40k)
+        #[arg(value_name = "NODES", default_value_t = 40_000)]
+        nodes: usize,
+
         /// Number of threads to use for parallel game generation
         #[arg(value_name = "THREADS")]
         threads: usize,
+
+        /// Output file path for training data (optional, defaults to training_data.binpack)
+        #[arg(value_name = "OUTPUT", default_value = "training_data.binpack")]
+        output_file: String,
     },
 
     /// Parse FEN positions from file to generate training data
@@ -67,11 +76,15 @@ fn main() {
     match cli.command {
         Commands::Play {
             num_positions,
+            nodes,
             threads,
+            output_file,
         } => {
             let options = GameOptions {
                 num_positions,
+                nodes,
                 threads,
+                output_file,
             };
             play(options);
         }

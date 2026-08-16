@@ -13,7 +13,7 @@ pub fn stockfish_eval_to_eval(score: i16) -> Eval {
 
 pub fn eval_to_stockfish_eval(eval: Eval) -> i16 {
     match eval {
-        Eval::MateIn(ply) => 32000 + ply as i16,
+        Eval::MateIn(ply) => 32000 - ply as i16,
         Eval::MatedIn(ply) => -32000 + ply as i16,
         Eval::CentiPawn(cp) => cp as i16,
     }

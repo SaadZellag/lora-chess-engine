@@ -1,7 +1,6 @@
 use std::{
-    collections::HashSet,
-    fs::OpenOptions,
-    io::{BufWriter, Write},
+    fs::File,
+    io::Write,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
@@ -10,87 +9,76 @@ use std::{
     time::Instant,
 };
 
-use chess::{Board, BoardStatus, ChessMove, MoveGen};
-use rand::{seq::SliceRandom, thread_rng, Rng};
+use chess::{Board, BoardStatus, ChessMove, MoveGen, Color};
+use rand::{seq::SliceRandom, thread_rng};
 
-use crate::utils::{new_engine, shared, GameResult, ENTRY_SIZE_BYTES};
+use crate::utils::{new_engine, GameResult};
+use crate::binpack::{BinPackWriter, GameEntry};
 
 // Chess openings last about 10 moves
 // https://www.chess.com/forum/view/chess-openings/how-many-moves-does-an-opening-consist-of#:~:text=It%20is%20normally%20about%2010,become%20obsessed%20by%20opening%20theory.
 // Starting after openings since engines generally have opening books
 const DEPTH_START: usize = 10;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct GameOptions {
     pub num_positions: usize,
+    pub nodes: usize,
     pub threads: usize,
+    pub output_file: String,
 }
 
 pub fn play(options: GameOptions) {
-    let train_path = "training_data.bin";
-    let val_path = "val_training_data.bin";
-
     println!(
-        "Playing ~{} games with {} thread(s)",
-        options.num_positions / 100,
-        options.threads
+        "Generating {} positions with {} thread(s) to {}",
+        options.num_positions, options.threads, options.output_file
     );
 
-    // Open training output file
-    let train_file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(train_path)
-        .unwrap();
-    let train_output = shared(BufWriter::new(train_file));
+    // Open output file
+    let output_file = File::create(&options.output_file)
+        .expect("Failed to create output file");
+    let output = Arc::new(Mutex::new(BinPackWriter::new(output_file)
+        .expect("Failed to create BinPackWriter")));
 
-    // Open validation output file
-    let val_file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(val_path)
-        .unwrap();
-    let val_output = shared(BufWriter::new(val_file));
-
-    let seen = Arc::new(Mutex::new(HashSet::with_capacity(
-        options.num_positions / 10,
-    )));
-    let total_count = Arc::new(AtomicUsize::new(1));
+    let total_count = Arc::new(AtomicUsize::new(0));
     let start = Instant::now();
 
     let mut threads = Vec::with_capacity(options.threads);
 
     for _ in 0..options.threads {
         let total_count = total_count.clone();
-        let train_output = train_output.clone();
-        let val_output = val_output.clone();
-        let seen = seen.clone();
+        let output = output.clone();
+        let nodes = options.nodes;
+        let num_positions = options.num_positions;
 
         let thread = thread::spawn(move || {
-            while options.num_positions > total_count.load(Ordering::Relaxed) {
-                let result = play_game();
+            while num_positions > total_count.load(Ordering::Relaxed) {
+                let result = play_game(nodes);
 
-                let bin_data = result.to_bin(seen.clone());
+                if let Ok(mut writer) = output.lock() {
+                    let game_entry = GameEntry {
+                        startpos: result.board,
+                        startply: 0,
+                        moves: result.moves,
+                        result: match result.winner {
+                            Some(Color::White) => crate::binpack::GameResult::WhiteWins,
+                            Some(Color::Black) => crate::binpack::GameResult::BlackWins,
+                            None => crate::binpack::GameResult::Draw,
+                        },
+                    };
 
-                // Splitting 90% train 10% test
-                let output = match thread_rng().gen_bool(0.9) {
-                    true => &train_output,
-                    false => &val_output,
-                };
+                    let num_positions = game_entry.moves.len();
 
-                if let Ok(mut out) = output.lock() {
-                    out.write_all(&bin_data).unwrap();
-                    total_count.fetch_add(bin_data.len() / ENTRY_SIZE_BYTES, Ordering::Relaxed);
+                    writer.write_game(&game_entry)
+                        .expect("Failed to write game to output file");
 
-                    // out.flush().unwrap();
+                    total_count.fetch_add(num_positions, Ordering::Relaxed);
                 }
 
                 let completed = total_count.load(Ordering::Relaxed);
-                let percentage = completed as f64 / options.num_positions as f64 * 100.0;
+                let percentage = completed as f64 / num_positions as f64 * 100.0;
                 let elapsed = start.elapsed();
-                let eta = (elapsed * (options.num_positions - completed) as u32) / completed as u32;
+                let eta = (elapsed * (num_positions - completed) as u32) / (completed as u32).max(1);
 
                 let eta_mins = (eta.as_secs() / 60) % 60;
                 let eta_hours = eta.as_secs() / 3600;
@@ -112,16 +100,18 @@ pub fn play(options: GameOptions) {
     for thread in threads {
         thread.join().unwrap();
     }
+
+    println!("\nCompleted!");
 }
 
-fn play_game() -> GameResult {
+fn play_game(nodes: usize) -> GameResult {
     let start_pos = generate_board();
 
     let mut board = start_pos;
     let mut moves = Vec::new();
     let mut history = Vec::new();
 
-    let mut engine = new_engine(board, history.clone());
+    let mut engine = new_engine(nodes);
 
     while board.status() == BoardStatus::Ongoing {
         if repetitions(&history, &board) >= 3 {
@@ -138,12 +128,12 @@ fn play_game() -> GameResult {
                 board.to_string(),
                 MoveGen::new_legal(&board).len()
             );
-            return play_game();
+            return play_game(nodes);
         }
 
         if moves.len() >= 150 {
             // Cannot be bothered with implementing the full logic of checking whether it's a draw
-            return play_game();
+            return play_game(nodes);
         }
     }
 
