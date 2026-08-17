@@ -27,7 +27,6 @@ pub struct TrainingEntry {
 #[derive(Debug, Clone)]
 pub struct GameEntry {
     pub startpos: Board,
-    pub startply: u16,
     pub moves: Vec<(Move, Eval)>,
     pub result: GameResult,
 }
@@ -127,14 +126,13 @@ impl<T: Write> BinPackWriter<T> {
 
         let mut board = game.startpos.clone();
         
-        for (i, (mv, eval)) in game.moves.iter().enumerate() {
-            let ply = game.startply + i as u16;
+        for (mv, eval) in game.moves.iter() {
 
             let entry = TrainingEntry {
                 board: board.clone(),
                 move_played: *mv,
                 eval: *eval,
-                ply,
+                ply: board.fullmove_number() * 2 + if board.side_to_move() == cozy_chess::Color::White { 0 } else { 1 },
                 result: game.result,
             };
 
@@ -235,7 +233,6 @@ use super::*;
 
         let game_entry = GameEntry {
             startpos: Board::default(),
-            startply: 0,
             moves,
             result: GameResult::WhiteWins,
         };

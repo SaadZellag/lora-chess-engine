@@ -89,8 +89,8 @@ impl NNUEAccumulator {
     }
 
     pub fn update(&self, initial_board: &Board, final_board: &Board, mv: Move) -> Self {
-    
         debug_assert_eq!(&initial_board.play_unchecked_new(mv), final_board);
+
         let piece_moving = initial_board
             .piece_on(mv.from)
             .expect("Invalid move for board");
@@ -98,6 +98,8 @@ impl NNUEAccumulator {
         // Since our feature set may be halfkp, any move by the king may
         // reset every single feature, it only becomes problematic in the endgame
         // where the king moves a lot, but the number of pieces aren't many
+        // TODO: Only the side moving should refresh, if white moves king then black shouldn't have to refresh
+        // Optimization left for later
         if piece_moving == Piece::King {
             return Self::new(final_board);
         }

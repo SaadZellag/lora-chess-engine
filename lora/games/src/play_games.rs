@@ -11,6 +11,7 @@ use std::{
 
 use common::cozy_chess::CozyChessHelper;
 use cozy_chess::{Board, Color, GameStatus, Move};
+use indicatif::{ProgressBar, ProgressStyle};
 use rand::{seq::SliceRandom, thread_rng};
 
 use crate::utils::{new_engine, GameResult};
@@ -42,15 +43,20 @@ pub fn play(options: GameOptions) {
         .expect("Failed to create BinPackWriter")));
 
     let total_count = Arc::new(AtomicUsize::new(0));
-    let start = Instant::now();
 
     let mut threads = Vec::with_capacity(options.threads);
+
+    let progress_bar = ProgressBar::new(options.num_positions as u64);
+    progress_bar.set_style(ProgressStyle::with_template(
+        "[{elapsed_precise}] {pos:>7}/{len:7} {percent}% done ({per_sec}) {eta_precise}",
+    ).unwrap().progress_chars("##-"));
 
     for _ in 0..options.threads {
         let total_count = total_count.clone();
         let output = output.clone();
         let nodes = options.nodes;
         let num_positions = options.num_positions;
+        let progress_bar = progress_bar.clone();
 
         let thread = thread::spawn(move || {
             while num_positions > total_count.load(Ordering::Relaxed) {
@@ -59,7 +65,6 @@ pub fn play(options: GameOptions) {
                 if let Ok(mut writer) = output.lock() {
                     let game_entry = GameEntry {
                         startpos: result.board,
-                        startply: 0,
                         moves: result.moves,
                         result: match result.winner {
                             Some(Color::White) => crate::binpack::GameResult::WhiteWins,
@@ -74,25 +79,9 @@ pub fn play(options: GameOptions) {
                         .expect("Failed to write game to output file");
 
                     total_count.fetch_add(num_positions, Ordering::Relaxed);
+
+                    progress_bar.inc(num_positions as u64);
                 }
-
-                let completed = total_count.load(Ordering::Relaxed);
-                let percentage = completed as f64 / num_positions as f64 * 100.0;
-                let elapsed = start.elapsed();
-                let eta = (elapsed * (num_positions - completed) as u32) / (completed as u32).max(1);
-
-                let eta_mins = (eta.as_secs() / 60) % 60;
-                let eta_hours = eta.as_secs() / 3600;
-
-                print!(
-                    "\r\x1b[K{:.2}% Done! {:.0} pos/sec. ETA: {}h {}min",
-                    percentage,
-                    completed as f64 / elapsed.as_secs_f64(),
-                    eta_hours,
-                    eta_mins
-                );
-
-                std::io::stdout().flush().unwrap();
             }
         });
         threads.push(thread);
@@ -102,6 +91,7 @@ pub fn play(options: GameOptions) {
         thread.join().unwrap();
     }
 
+    progress_bar.finish_with_message("Done");
     println!("\nCompleted!");
 }
 
