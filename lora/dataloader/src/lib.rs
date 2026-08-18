@@ -30,27 +30,13 @@ pub extern "C" fn fetch_next_batch(stream: *mut SparseBatchStream) -> *const Spa
         return ptr::null();
     }
 
-    let mut stream = unsafe { Box::from_raw(stream) };
+    let stream = unsafe { stream.as_mut_unchecked() };
 
     if let Some(batch) = stream.next() {
-        Box::leak(stream); // Don't let the borrow checker drop it
         let batch = Box::new(batch);
         return Box::leak(batch) as *const SparseBatch;
     }
-    Box::leak(stream); // Don't let the borrow checker drop it
     ptr::null()
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn stream_len(stream: *mut SparseBatchStream) -> size_t {
-    if stream.is_null() {
-        return 0;
-    }
-
-    let stream = unsafe { Box::from_raw(stream) };
-    let len = stream.len();
-    Box::leak(stream); // Don't let the borrow checker drop it
-    len
 }
 
 #[unsafe(no_mangle)]
@@ -67,6 +53,6 @@ pub extern "C" fn drop_sparse_batch(batch: *mut SparseBatch) {
         return;
     }
     unsafe {
-        SparseBatch::drop_batch(batch);
+        let _ = Box::from_raw(batch);
     }
 }

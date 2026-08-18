@@ -2,17 +2,17 @@
 use clap::{Parser, Subcommand};
 
 use crate::{
-    parse_games::{parse, ParseOptions},
     play_games::{play, GameOptions},
     test::test,
     bench::bench,
+    compute::compute,
 };
 
-mod parse_games;
 mod play_games;
 mod test;
 mod utils;
 mod bench;
+mod compute;
 mod binpack;
 
 #[derive(Parser)]
@@ -45,15 +45,17 @@ enum Commands {
         output_file: String,
     },
 
-    /// Parse FEN positions from file to generate training data
-    Parse {
-        /// Number of threads to use for parallel parsing
-        #[arg(value_name = "THREADS")]
-        threads: usize,
+    /// Compute the scaling factor for the evaluation function based on a dataset of games
+    Compute {
+        #[arg(short, long)]
+        binpack_files: Vec<String>,
 
-        /// Maximum number of positions to parse (optional, parses all if not specified)
-        #[arg(value_name = "MAX")]
-        max_positions: Option<usize>,
+        /// How often before the scaling factor is recomputed)
+        #[arg(short, long, default_value_t = 10000000)]
+        recompute_interval: usize,
+
+        #[arg(short, long, default_value_t = false)]
+        show_graph: bool,
     },
 
     /// Test mode for validating data generation
@@ -88,18 +90,11 @@ fn main() {
             };
             play(options);
         }
-        Commands::Parse {
-            threads,
-            max_positions,
-        } => {
-            let options = ParseOptions {
-                threads,
-                max_positions,
-            };
-            parse(options);
-        }
         Commands::Test { binpack_file } => {
             test(&binpack_file);
+        },
+        Commands::Compute { binpack_files, recompute_interval, show_graph } => {
+            compute(&binpack_files, recompute_interval, show_graph);
         },
         Commands::Bench { path } => {
             bench(&path);

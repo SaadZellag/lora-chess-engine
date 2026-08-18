@@ -4,40 +4,34 @@ use std::{
     path::Path,
 };
 
-use games::utils::ENTRY_SIZE_BYTES;
+use games::{binpack::BinPackReader};
 
 use crate::utils::SparseBatch;
 
 #[derive(Debug)]
 #[repr(C)]
 pub struct SparseBatchStream {
-    reader: BufReader<File>,
-    buffer: Vec<u8>,
-    num_batches: usize,
+    file_name: String,
+    reader: BinPackReader<BufReader<File>>,
+    batch_size: usize
 }
 
 impl SparseBatchStream {
-    pub fn new<P>(path: P, mut batch_size: usize) -> Option<Self>
+    pub fn new<P>(path: P, batch_size: usize) -> Option<Self>
     where
         P: AsRef<Path>,
     {
+        let file_name: String = path.as_ref().file_name()?.to_str()?.to_owned();
         let file = File::open(path).ok()?;
-        let file_size = file.metadata().ok()?.len() as usize;
-        let num_batches = if file_size < (batch_size * ENTRY_SIZE_BYTES) {
-            batch_size = file_size / ENTRY_SIZE_BYTES;
-            1
-        } else {
-            file_size / (batch_size * ENTRY_SIZE_BYTES)
-        };
 
-        let reader = BufReader::new(file);
+        let file = BufReader::new(file);
+        let reader = BinPackReader::new(file).ok()?;
 
-        let buffer = vec![0; batch_size * ENTRY_SIZE_BYTES];
 
         Some(Self {
+            file_name,
             reader,
-            buffer,
-            num_batches,
+            batch_size
         })
     }
 }
@@ -46,24 +40,13 @@ impl Iterator for SparseBatchStream {
     type Item = SparseBatch;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Err(_) = self.reader.read_exact(&mut self.buffer) {
-            self.reader.seek(SeekFrom::Start(0)).ok()?;
+        if !self.reader.has_next() {
+            let file = BufReader::new(File::open(&self.file_name).ok()?);
+            self.reader = BinPackReader::new(file).ok()?;
         }
 
-        let data = self
-            .buffer
-            .chunks(ENTRY_SIZE_BYTES)
-            .map(|c| bincode::deserialize(c).unwrap())
-            .collect::<Vec<_>>();
+        let entries = self.reader.get_next_entries(self.batch_size).ok()?;
 
-        // data.shuffle(&mut thread_rng());
-
-        Some(SparseBatch::new(&data))
-    }
-}
-
-impl ExactSizeIterator for SparseBatchStream {
-    fn len(&self) -> usize {
-        self.num_batches
+        Some(SparseBatch::new(&entries))
     }
 }

@@ -1,6 +1,6 @@
 use std::{fmt::Debug, io::{Read, Seek, Write}, str::FromStr};
 
-use cozy_chess::{Board, Move, Square};
+use cozy_chess::{Board, Color, Move, Square};
 use engine::Eval;
 use sfbinpack::{CompressedReaderError, CompressedTrainingDataEntryReader, CompressedTrainingDataEntryWriter, CompressedWriterError, chess::r#move::MoveType};
 
@@ -31,10 +31,12 @@ pub struct GameEntry {
     pub result: GameResult,
 }
 
+#[derive(Debug)]
 pub struct BinPackReader<T: Read + Seek> {
     reader: CompressedTrainingDataEntryReader<T>
 }
 
+#[derive(Debug)]
 pub struct BinPackWriter<T: Write> {
     writer: CompressedTrainingDataEntryWriter<T>
 }
@@ -76,10 +78,12 @@ impl<T: Read + Seek> BinPackReader<T> {
             None
         };
 
-        let result = match entry.result {
-                1 => GameResult::WhiteWins,
-                0 => GameResult::Draw,
-                -1 => GameResult::BlackWins,
+        let result = match (entry.result, board.side_to_move()) {
+                (0, _) => GameResult::Draw,
+                (1, Color::White) => GameResult::WhiteWins,
+                (-1, Color::White) => GameResult::BlackWins,
+                (-1, Color::Black) => GameResult::WhiteWins,
+                (1, Color::Black) => GameResult::BlackWins,
                 _ => anyhow::bail!("Invalid game result value"),
         };
 
@@ -110,6 +114,10 @@ impl<T: Read + Seek> BinPackReader<T> {
             entries.push(entry);
         }
         Ok(entries)
+    }
+
+    pub fn has_next(&self) -> bool {
+        self.reader.has_next()
     }
 }
 

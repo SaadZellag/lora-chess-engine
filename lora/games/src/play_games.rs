@@ -14,8 +14,8 @@ use cozy_chess::{Board, Color, GameStatus, Move};
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::{seq::SliceRandom, thread_rng};
 
-use crate::utils::{new_engine, GameResult};
-use crate::binpack::{BinPackWriter, GameEntry};
+use crate::utils::{new_engine};
+use crate::binpack::{BinPackWriter, GameEntry, GameResult};
 
 // Chess openings last about 10 moves
 // https://www.chess.com/forum/view/chess-openings/how-many-moves-does-an-opening-consist-of#:~:text=It%20is%20normally%20about%2010,become%20obsessed%20by%20opening%20theory.
@@ -63,19 +63,19 @@ pub fn play(options: GameOptions) {
                 let result = play_game(nodes);
 
                 if let Ok(mut writer) = output.lock() {
-                    let game_entry = GameEntry {
-                        startpos: result.board,
-                        moves: result.moves,
-                        result: match result.winner {
-                            Some(Color::White) => crate::binpack::GameResult::WhiteWins,
-                            Some(Color::Black) => crate::binpack::GameResult::BlackWins,
-                            None => crate::binpack::GameResult::Draw,
-                        },
-                    };
+                    // let game_entry = GameEntry {
+                    //     startpos: result.board,
+                    //     moves: result.moves,
+                    //     result: match result.winner {
+                    //         Some(Color::White) => crate::binpack::GameResult::WhiteWins,
+                    //         Some(Color::Black) => crate::binpack::GameResult::BlackWins,
+                    //         None => crate::binpack::GameResult::Draw,
+                    //     },
+                    // };
 
-                    let num_positions = game_entry.moves.len();
+                    let num_positions = result.moves.len();
 
-                    writer.write_game(&game_entry)
+                    writer.write_game(&result)
                         .expect("Failed to write game to output file");
 
                     total_count.fetch_add(num_positions, Ordering::Relaxed);
@@ -95,7 +95,7 @@ pub fn play(options: GameOptions) {
     println!("\nCompleted!");
 }
 
-fn play_game(nodes: usize) -> GameResult {
+fn play_game(nodes: usize) -> GameEntry {
     let start_pos = generate_board();
 
     let mut board = start_pos.clone();
@@ -129,15 +129,17 @@ fn play_game(nodes: usize) -> GameResult {
     }
 
     let winner = match board.status() {
-        GameStatus::Ongoing => None, // Draw by repetition
-        GameStatus::Drawn => None,
-        GameStatus::Won => Some(!board.side_to_move()),
+        GameStatus::Ongoing | GameStatus::Drawn => GameResult::Draw,
+        GameStatus::Won => match board.side_to_move() {
+            Color::White => GameResult::BlackWins,
+            Color::Black => GameResult::WhiteWins,
+        },
     };
 
-    GameResult {
-        board: start_pos,
+    GameEntry {
+        startpos: start_pos,
         moves,
-        winner,
+        result: winner,
     }
 }
 

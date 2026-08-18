@@ -20,7 +20,6 @@ dll = ctypes.cdll.LoadLibrary(dllpath)
 class SparseBatch(ctypes.Structure):
     _fields_ = [
         ('size', ctypes.c_int),
-        ('max_active_features', ctypes.c_int),
         ('num_active_our_features', ctypes.c_int),
         ('num_active_their_features', ctypes.c_int),
         ('score', ctypes.POINTER(ctypes.c_float)),
@@ -97,10 +96,6 @@ fetch_next_batch = dll.fetch_next_batch
 fetch_next_batch.argtypes = [ctypes.c_void_p]
 fetch_next_batch.restype = SparseBatchPtr
 
-stream_len = dll.stream_len
-stream_len.argtypes = [ctypes.c_void_p]
-stream_len.restype = ctypes.c_size_t
-
 drop_sparse_batch_stream = dll.drop_sparse_batch_stream
 drop_sparse_batch_stream.argtypes = [ctypes.c_void_p]
 
@@ -124,9 +119,6 @@ class SparseBatchDataset(torch.utils.data.IterableDataset):
             return tensors
         else:
             raise StopIteration
-
-    def __len__(self):
-        return stream_len(self.stream)
 
     def __del__(self):
         drop_sparse_batch_stream(self.stream)
