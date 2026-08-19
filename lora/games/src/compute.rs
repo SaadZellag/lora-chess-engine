@@ -9,6 +9,8 @@ use crate::binpack::{BinPackReader, GameResult};
 use plotly::{Plot, Scatter, Layout};
 use plotly::common::Mode;
 
+// https://github.com/official-stockfish/WDL_model
+
 const PLY_SCALING_FACTOR: f64 = 100.0;
 
 // Grid search parameters for k and q tuning

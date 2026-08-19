@@ -106,49 +106,6 @@ class NNUE(pl.LightningModule):
     #     # self.log("nodes", nodes, on_step=False, on_epoch=True)
 
 
-class ChessDataSet(Dataset):
-    def __init__(self, file_name):
-        with open(file_name, 'rb') as f:
-            self.data = f.read()
-
-        assert len(self.data) % DATA_SIZE == 0
-        self.len = len(self.data) // DATA_SIZE
-        print(f'Dataset has {self.len} Positions')
-
-    def __len__(self):
-        return self.len
-
-    def __getitem__(self, idx):
-        idx = idx * DATA_SIZE
-        content = struct.unpack_from(
-            SPC_DATA_FORMAT, self.data, idx)
-
-        white_features = torch.zeros([NUM_FEATURES], dtype=torch.float)
-        black_features = torch.zeros([NUM_FEATURES], dtype=torch.float)
-
-        for i in range(32):
-            if content[i] == 65535:
-                break
-            white_features[content[i]] = 1
-
-        for i in range(32, 64):
-            if content[i] == 65535:
-                break
-            black_features[content[i]] = 1
-
-        final_score = content[64]
-        eval = sigmoid(content[65] / WEIGHT_SCALE / ACTIVATION_RANGE)
-        stm = content[66]
-
-        target_score = eval * LAMBDA + (1 - LAMBDA) * final_score
-        # print(eval, final_score)
-
-        # if it's not white to move, then the features should be switched
-        if not stm:
-            white_features, black_features = black_features, white_features
-
-        return white_features, black_features, torch.tensor([target_score])
-
 
 def nnue_to_rust(nnue: NNUE):
 
@@ -241,26 +198,3 @@ elif sys.argv[1] == 'convert':
     nnue_to_rust(nnue)
     model_params = sum([par.numel() for par in nnue.parameters()])
     print(f"Total model parameters: {model_params}")
-
-elif sys.argv[1] == 'bench':
-    lp = LineProfiler()
-    dataset = ChessDataSet('../games/training_data.bin')
-
-    lp.add_function(dataset.__getitem__)
-
-    def run():
-        for i in range(0, 100000):
-            dataset[i % dataset.len]
-
-    lp_wrapper = lp(run)
-    lp_wrapper()
-
-    lp.print_stats()
-
-elif sys.argv[1] == 'test':
-    dataset = ChessDataSet('../games/training_data.bin')
-    fast_dataset = SparseBatchDataset(
-        b"../games/training_data.bin", BATCH_SIZE)
-
-    print(dataset[0])
-    print([val[0] for val in next(fast_dataset)])

@@ -22,7 +22,9 @@ class SparseBatch(ctypes.Structure):
         ('size', ctypes.c_int),
         ('num_active_our_features', ctypes.c_int),
         ('num_active_their_features', ctypes.c_int),
-        ('score', ctypes.POINTER(ctypes.c_float)),
+
+        ('final_score', ctypes.POINTER(ctypes.c_float)),
+        ('ply', ctypes.POINTER(ctypes.c_int)),
         ('eval', ctypes.POINTER(ctypes.c_int)),
         ('our_feature_indices', ctypes.POINTER(ctypes.c_int)),
         ('their_feature_indices', ctypes.POINTER(ctypes.c_int)),
@@ -35,7 +37,7 @@ class SparseBatch(ctypes.Structure):
         # sure the source lives long enough for the copy to finish.
 
         score_t = torch.from_numpy(np.ctypeslib.as_array(
-            self.score, shape=(self.size, 1)))
+            self.final_score, shape=(self.size, 1)))
 
         eval_t = torch.from_numpy(np.ctypeslib.as_array(
             self.eval, shape=(self.size, 1)))

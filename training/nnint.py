@@ -2,12 +2,11 @@ import math
 import matplotlib.pyplot as plt
 import sys
 import numpy as np
-from trainer import NNUE, ChessDataSet, load_nnue
+from trainer import NNUE, load_nnue
 from consts import *
 from nnue_dataset import SparseBatchDataset
 import torch
 
-BIAS_SCALE = ACTIVATION_RANGE * WEIGHT_SCALE
 
 
 def to_np(tensor):
@@ -74,8 +73,6 @@ if __name__ == '__main__':
     data_y = []
 
     total_batches = 100000
-
-    print('len:', len(dataset))
 
     try:
         for (i, data) in enumerate(dataset):
