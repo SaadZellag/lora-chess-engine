@@ -2,10 +2,7 @@
 use clap::{Parser, Subcommand};
 
 use crate::{
-    play_games::{play, GameOptions},
-    test::test,
-    bench::bench,
-    compute::compute,
+    bench::bench, compute::compute, play_games::{GameOptions, play}, prepare_training_data::prepare_training_data, test::test,
 };
 
 mod play_games;
@@ -14,6 +11,7 @@ mod utils;
 mod bench;
 mod compute;
 mod binpack;
+mod prepare_training_data;
 
 #[derive(Parser)]
 #[command(name = "games")]
@@ -45,17 +43,14 @@ enum Commands {
         output_file: String,
     },
 
-    /// Compute the scaling factor for the evaluation function based on a dataset of games
+    /// Compute histogram from binpack files and output to JSON
     Compute {
-        #[arg(short, long)]
+        #[arg(short, long, num_args = 1..)]
         binpack_files: Vec<String>,
 
-        /// How often before the scaling factor is recomputed)
-        #[arg(short, long, default_value_t = 10000000)]
-        recompute_interval: usize,
-
-        #[arg(short, long, default_value_t = false)]
-        show_graph: bool,
+        /// Output file path for histogram JSON
+        #[arg(short, long, default_value = "histogram.json")]
+        output: String,
     },
 
     /// Test mode for validating data generation
@@ -69,7 +64,9 @@ enum Commands {
         /// Path to the file to benchmark
         #[arg(value_name = "PATH")]
         path: String,
-    }
+    },
+
+    PrepareTrainingData(prepare_training_data::Options),
 }
 
 fn main() {
@@ -93,11 +90,14 @@ fn main() {
         Commands::Test { binpack_file } => {
             test(&binpack_file);
         },
-        Commands::Compute { binpack_files, recompute_interval, show_graph } => {
-            compute(&binpack_files, recompute_interval, show_graph);
+        Commands::Compute { binpack_files, output } => {
+            compute(&binpack_files, &output);
         },
         Commands::Bench { path } => {
             bench(&path);
         }
+        Commands::PrepareTrainingData(options) => {
+            prepare_training_data(options);
+        },
     }
 }

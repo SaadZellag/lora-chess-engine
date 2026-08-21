@@ -55,18 +55,18 @@ def main():
         description='Extract N chunks from a stockfish binpack file'
     )
     parser.add_argument(
-        '--input_file',
+        '--input-file',
         required=True,
         help='Path to the input binpack file'
     )
     parser.add_argument(
-        '--num_chunks',
+        '--num-chunks',
         type=int,
         required=True,
         help='Number of chunks to extract'
     )
     parser.add_argument(
-        '--output_file',
+        '--output-file',
         required=True,
         help='Path to the output file'
     )

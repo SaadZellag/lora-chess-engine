@@ -2,27 +2,55 @@
 
 use std::collections::HashMap;
 use std::fs::File;
-use cozy_chess::Color;
-use engine::Eval;
-use plotly::color::NamedColor;
+use std::time::Instant;
+use serde::{Serialize, Deserialize};
+use cozy_chess::{Board, Color, Piece};
 use crate::binpack::{BinPackReader, GameResult};
-use plotly::{Plot, Scatter, Layout};
-use plotly::common::Mode;
+use indicatif::{ProgressBar, ProgressStyle};
 
-// https://github.com/official-stockfish/WDL_model
 
-const PLY_SCALING_FACTOR: f64 = 100.0;
 
-// Grid search parameters for k and q tuning
-const K_MIN: f64 = 5.0;
-const K_MAX: f64 = 1000.0;
-const K_STEP: f64 = 1.0;
-const Q_MIN: f64 = 0.0;
-const Q_MAX: f64 = 5.0;
-const Q_STEP: f64 = 0.005;
-const GRID_SEARCH_PROGRESS_INTERVAL: usize = 50000;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct Key {
+    eval_value: i32,
+    mom_bucket: u32,
+}
 
-pub fn compute(binpack_files: &[String], recompute_interval: usize, show_graph: bool) {
+
+#[derive(Debug, Clone, Copy, Default)]
+struct Value {
+    wins: u32,
+    losses: u32,
+    draws: u32,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct HistogramEntry {
+    eval: i32,
+    mom_bucket: u32,
+    wins: u32,
+    losses: u32,
+    draws: u32,
+}
+
+pub fn compute(binpack_files: &[String], output_file: &str) {
+    // Calculate total file size
+    let total_bytes: u64 = binpack_files
+        .iter()
+        .filter_map(|path| std::fs::metadata(path).ok().map(|m| m.len()))
+        .sum();
+
+    if total_bytes == 0 {
+        eprintln!("No valid binpack files found");
+        return;
+    }
+
+    // Create progress bar
+    let progress_bar = ProgressBar::new(total_bytes);
+    progress_bar.set_style(ProgressStyle::with_template(
+        "[{elapsed_precise}] {bar:40.cyan/blue} {binary_bytes}/{binary_total_bytes} ETA: {eta_precise}"
+    ).unwrap().progress_chars("##-"));
+
     // Create readers for each file
     let mut readers: Vec<_> = binpack_files
         .iter()
@@ -38,12 +66,13 @@ pub fn compute(binpack_files: &[String], recompute_interval: usize, show_graph: 
         return;
     }
 
-    println!("Opened {} binpack files", readers.len());
+    println!("Opened {} binpack files ({} bytes total)", readers.len(), total_bytes);
 
-    // Histogram: eval value -> (sum of results, count)
-    let mut histogram: HashMap<i32, (f64, u64)> = HashMap::new();
+    // 2D Histogram: (eval_value, mom) -> (sum_result, count)
+    let mut histogram: HashMap<Key, Value> = HashMap::new();
     let mut total_entries = 0u64;
     let mut active_readers = (0..readers.len()).collect::<Vec<_>>();
+    let mut last_update = Instant::now();
 
     // Keep reading until all files exhausted (interleaved)
     while !active_readers.is_empty() {
@@ -53,34 +82,34 @@ pub fn compute(binpack_files: &[String], recompute_interval: usize, show_graph: 
             
             if let Ok(entry) = readers[reader_idx].get_next_entry() {
                 // Convert result from player to move's perspective
-                let player_result = match (entry.result, entry.board.side_to_move()) {
+
+
+                let eval_value = entry.eval.value();
+                let mom_bucket = mom_value(&entry.board);
+                
+                let key = Key { eval_value, mom_bucket };
+
+                let histogram_entry = histogram.entry(key).or_default();
+
+                match (entry.result, entry.board.side_to_move()) {
                     // Player to move wins
-                    (GameResult::WhiteWins, Color::White) => 1.0,
-                    (GameResult::BlackWins, Color::Black) => 1.0,
+                    (GameResult::WhiteWins, Color::White) => histogram_entry.wins += 1,
+                    (GameResult::BlackWins, Color::Black) => histogram_entry.wins += 1,
                     // Player to move loses
-                    (GameResult::WhiteWins, Color::Black) => 0.0,
-                    (GameResult::BlackWins, Color::White) => 0.0,
+                    (GameResult::WhiteWins, Color::Black) => histogram_entry.losses += 1,
+                    (GameResult::BlackWins, Color::White) => histogram_entry.losses += 1,
                     // Draw
-                    (GameResult::Draw, _) => 0.5,
+                    (GameResult::Draw, _) => histogram_entry.draws += 1,
                 };
 
-                let Eval::CentiPawn(eval_value) = entry.eval else { continue; };
-                
-                let entry_data = histogram.entry(eval_value).or_insert((0.0, 0));
-                entry_data.0 += player_result;
-                entry_data.1 += 1;
                 
                 total_entries += 1;
 
-                // Print progress
-                if total_entries % recompute_interval as u64 == 0 {
-                    println!("Processed {} entries", total_entries);
-                    let (k, q) = tune_k_and_q(&histogram);
-                    println!("Optimal k value: {:.2}, q value: {:.6}", k, q);
-                    println!("Final MSE: {:.6}", calculate_mse(&histogram, k, q));
-                    if show_graph {
-                        update_plot(&histogram, k, q);
-                    }
+                // Update progress bar every second
+                if last_update.elapsed().as_secs() >= 1 {
+                    let bytes_read = readers[reader_idx].read_bytes();
+                    progress_bar.set_position(bytes_read);
+                    last_update = Instant::now();
                 }
                 
                 i += 1;
@@ -91,127 +120,42 @@ pub fn compute(binpack_files: &[String], recompute_interval: usize, show_graph: 
         }
     }
 
+    progress_bar.finish_with_message("Done reading");
     println!("Total entries processed: {}", total_entries);
-    println!("Unique eval values: {}", histogram.len());
+    println!("Unique (eval, mom) pairs: {}", histogram.len());
 
-    // Tune k and q using gradient descent
-    let (k, q) = tune_k_and_q(&histogram);
-    println!("Optimal k value: {:.2}, q value: {:.6}", k, q);
-    println!("Final MSE: {:.6}", calculate_mse(&histogram, k, q));
-    if show_graph {
-        update_plot(&histogram, k, q);
-    }
-}
-
-fn tune_k_and_q(histogram: &HashMap<i32, (f64, u64)>) -> (f64, f64) {
-    let mut best_k = K_MIN;
-    let mut best_q = Q_MIN;
-    let mut best_mse = f64::INFINITY;
-    
-    let mut iteration = 0;
-    let total_iterations = ((K_MAX - K_MIN) / K_STEP + 1.0) * ((Q_MAX - Q_MIN) / Q_STEP + 1.0);
-    
-    let mut k = K_MIN;
-    while k <= K_MAX {
-        let mut q = Q_MIN;
-        while q <= Q_MAX {
-            let mse = calculate_mse(histogram, k, q);
-            
-            if mse < best_mse {
-                best_mse = mse;
-                best_k = k;
-                best_q = q;
-            }
-            
-            iteration += 1;
-            if iteration % GRID_SEARCH_PROGRESS_INTERVAL == 0 {
-                println!("Grid search progress: {:.1}% - Current best: k={:.2}, q={:.4}, MSE={:.8}", 
-                         (iteration as f64 / total_iterations) * 100.0, best_k, best_q, best_mse);
-            }
-            
-            q += Q_STEP;
-        }
-        k += K_STEP;
-    }
-    
-    println!("Grid search complete!");
-    println!("Best k: {:.2}, Best q: {:.4}, Best MSE: {:.8}", best_k, best_q, best_mse);
-    
-    (best_k, best_q)
-}
-
-fn calculate_mse(histogram: &HashMap<i32, (f64, u64)>, k: f64, q: f64) -> f64 {
-    let mut total_error = 0.0;
-    let mut total_weight = 0u64;
-
-    for (eval_value, (sum_result, count)) in histogram.iter() {
-        let actual_result = sum_result / *count as f64;
-        let predicted = sigmoid(*eval_value as f64, k, q);
-        let error = (actual_result - predicted).powi(2);
-        
-        total_error += error * *count as f64;
-        total_weight += count;
-    }
-
-    if total_weight == 0 {
-        return f64::INFINITY;
-    }
-
-    total_error / total_weight as f64
-}
-
-fn sigmoid(x: f64, k: f64, q: f64) -> f64 {
-    // f(x) = 1 / (1 + e^(-x))
-    // g(x) = f(k*x*|k*x|^q)
-    let kx = x / k;
-    let exponent = kx * kx.abs().powf(q);
-    1.0 / (1.0 + (-exponent).exp())
-}
-
-fn update_plot(histogram: &HashMap<i32, (f64, u64)>, k: f64, q: f64) {
-    let mut plot = Plot::new();
-    
-    // Extract histogram points
-    let mut eval_values: Vec<_> = histogram.keys().copied().collect();
-    eval_values.sort();
-    
-    let xs: Vec<f64> = eval_values.iter().map(|&x| x as f64).collect();
-    let ys: Vec<f64> = eval_values
+    // Convert histogram to JSON format
+    let mut json_data: Vec<HistogramEntry> = histogram
         .iter()
-        .map(|&x| {
-            let (sum_result, count) = histogram[&x];
-            sum_result / count as f64
+        .map(|(key, value)| HistogramEntry {
+            eval: key.eval_value,
+            mom_bucket: key.mom_bucket,
+            wins: value.wins,
+            losses: value.losses,
+            draws: value.draws,
         })
         .collect();
     
-    // Add histogram points
-    let scatter = Scatter::new(xs.clone(), ys.clone())
-        .mode(Mode::Markers)
-        .name("Histogram Points")
-        .marker(plotly::common::Marker::new().size(6).color(NamedColor::Blue));
-    plot.add_trace(scatter);
+    // Sort by eval then mom_bucket for consistent output
+    json_data.sort_by_key(|e| (e.eval, e.mom_bucket));
     
-    // Generate sigmoid curve
-    let min_eval = *eval_values.first().unwrap_or(&-3000) as f64;
-    let max_eval = *eval_values.last().unwrap_or(&3000) as f64;
-    let curve_xs: Vec<f64> = (0..1000)
-        .map(|i| min_eval + (max_eval - min_eval) * i as f64 / 999.0)
-        .collect();
-    let curve_ys: Vec<f64> = curve_xs.iter().map(|&x| sigmoid(x, k, q)).collect();
-    
-    let curve = Scatter::new(curve_xs, curve_ys)
-        .mode(Mode::Lines)
-        .name(format!("Sigmoid (k={:.2}, q={:.6})", k, q))
-        .line(plotly::common::Line::new().color(NamedColor::Red).width(2.0));
-    plot.add_trace(curve);
-    
-    // Update layout
-    let layout = Layout::new()
-        .title("Eval Value vs Game Result".into())
-        .x_axis(plotly::layout::Axis::new().title("Eval Value".into()))
-        .y_axis(plotly::layout::Axis::new().title("Actual Result".into()));
-    plot.set_layout(layout);
-    
-    // Show plot in browser
-    plot.show();
+    // Write to file
+    match std::fs::File::create(output_file) {
+        Ok(file) => {
+            match serde_json::to_writer_pretty(file, &json_data) {
+                Ok(_) => println!("Histogram written to {}", output_file),
+                Err(e) => eprintln!("Failed to serialize histogram: {}", e),
+            }
+        }
+        Err(e) => eprintln!("Failed to create output file: {}", e),
+    }
+}
+
+fn mom_value(board: &Board) -> u32 {
+   board.pieces(Piece::Queen).len() * 9
+        + board.pieces(Piece::Rook).len() * 5
+        + board.pieces(Piece::Bishop).len() * 3
+        + board.pieces(Piece::Knight).len() * 3
+        + board.pieces(Piece::Pawn).len() * 1
+
 }

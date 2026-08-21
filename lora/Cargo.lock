@@ -526,6 +526,7 @@ dependencies = [
  "rand",
  "rayon",
  "serde",
+ "serde_json",
  "sfbinpack",
  "tempfile",
 ]

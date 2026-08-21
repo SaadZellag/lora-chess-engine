@@ -119,6 +119,10 @@ impl<T: Read + Seek> BinPackReader<T> {
     pub fn has_next(&self) -> bool {
         self.reader.has_next()
     }
+
+    pub fn read_bytes(&self) -> u64 {
+        self.reader.read_bytes()
+    }
 }
 
 impl<T: Write> BinPackWriter<T> {

@@ -1,3 +1,4 @@
+
 from io import TextIOWrapper
 import subprocess
 import torch
@@ -12,11 +13,12 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.nn.functional as F
 import struct
 import sys
+import argparse
 from consts import *
-from line_profiler import LineProfiler
 from datetime import datetime
 
 from nnue_dataset import SparseBatchDataset
+
 
 
 class NNUE(pl.LightningModule):
@@ -69,7 +71,7 @@ class NNUE(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = Adam(self.parameters(), lr=LR)
         scheduler = ReduceLROnPlateau(
-            optimizer, mode='min', verbose=True, patience=3)
+            optimizer, mode='min', patience=3)
         return {
             "optimizer": optimizer,
             "lr_scheduler": scheduler,
@@ -154,9 +156,25 @@ def load_nnue(path):
     return nnue
 
 
-if __name__ != '__main__':
-    pass
-elif sys.argv[1] == 'train':
+if __name__ == '__main__':
+    
+    # Argument parser for CLI options
+    parser = argparse.ArgumentParser(description='NNUE Training')
+    parser.add_argument('--train-input', type=str,
+                        help='Path to training data file')
+    parser.add_argument('--test-input', type=str,
+                        help='Path to test data file')
+    parser.add_argument('--batch-size', type=int, default=8192,
+                        help='Batch size for training (default: 8192)')
+    parser.add_argument('--num-workers', type=int, default=1,
+                        help='Number of workers for data loading (default: 24)')
+    parser.add_argument('--epochs', type=int, default=50,
+                        help='Number of epochs for training (default: 50)')
+    parser.add_argument('--checkpoint', type=str, default=None,
+                        help='Path to checkpoint for resuming training')
+    parser.add_argument('--dll-path', type=str)
+    args, unknown = parser.parse_known_args()
+
 
     # train_dataset = ChessDataSet('../games/training_data.bin')
     # train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE,
@@ -174,27 +192,28 @@ elif sys.argv[1] == 'train':
         filename=f'NNUE-2x{M}-{K}-{now}'
     )
 
+    tb_logger = TensorBoardLogger("tb_logs", name=f"NNUE-2x{M}-{K}")
+
     trainer = pl.Trainer(callbacks=checkpoint,
+                         logger=tb_logger,
                          log_every_n_steps=1,
                          accelerator='gpu', devices=1,
-                         max_epochs=EPOCHS
+                         max_epochs=args.epochs
                          )
 
-    if len(sys.argv) > 2:
-        nnue = load_nnue(sys.argv[2])
+    if args.checkpoint:
+        nnue = load_nnue(args.checkpoint)
     else:
         nnue = NNUE()
+    # nnue = NNUE()
 
-    train_dataloader = SparseBatchDataset(
-        b"../games/training_data.bin", BATCH_SIZE)
-    val_dataloader = SparseBatchDataset(
-        b"../games/val_training_data.bin", BATCH_SIZE)
-    trainer.fit(nnue, train_dataloaders=train_dataloader,
-                val_dataloaders=val_dataloader)
+    train_dataloader = SparseBatchDataset(args.dll_path, args.train_input, args.batch_size)
+    val_dataloader = SparseBatchDataset(args.dll_path, args.test_input, args.batch_size)
+    trainer.fit(nnue, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
-elif sys.argv[1] == 'convert':
-    nnue = load_nnue(sys.argv[2])
+# elif sys.argv[1] == 'convert':
+#     nnue = load_nnue(sys.argv[2])
 
-    nnue_to_rust(nnue)
-    model_params = sum([par.numel() for par in nnue.parameters()])
-    print(f"Total model parameters: {model_params}")
+#     nnue_to_rust(nnue)
+#     model_params = sum([par.numel() for par in nnue.parameters()])
+#     print(f"Total model parameters: {model_params}")

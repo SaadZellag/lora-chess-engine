@@ -7,14 +7,8 @@ import sys
 import glob
 from torch.utils.data import Dataset
 from consts import *
+from pathlib import Path
 
-local_dllpath = [n for n in glob.glob(
-    '../target/release/*libdataloader.*') if n.endswith('.so') or n.endswith('.dll') or n.endswith('.dylib')]
-if not local_dllpath:
-    print('Cannot find data_loader shared library.')
-    sys.exit(1)
-dllpath = os.path.abspath(local_dllpath[0])
-dll = ctypes.cdll.LoadLibrary(dllpath)
 
 
 class SparseBatch(ctypes.Structure):
@@ -24,7 +18,7 @@ class SparseBatch(ctypes.Structure):
         ('num_active_their_features', ctypes.c_int),
 
         ('final_score', ctypes.POINTER(ctypes.c_float)),
-        ('ply', ctypes.POINTER(ctypes.c_int)),
+        ('mom_value', ctypes.POINTER(ctypes.c_int)),
         ('eval', ctypes.POINTER(ctypes.c_int)),
         ('our_feature_indices', ctypes.POINTER(ctypes.c_int)),
         ('their_feature_indices', ctypes.POINTER(ctypes.c_int)),
@@ -42,8 +36,13 @@ class SparseBatch(ctypes.Structure):
         eval_t = torch.from_numpy(np.ctypeslib.as_array(
             self.eval, shape=(self.size, 1)))
 
-        final_eval_t = torch.sigmoid(
-            eval_t / WEIGHT_SCALE / ACTIVATION_RANGE * 8) * LAMBDA + score_t * (1 - LAMBDA)
+        mom_t = torch.from_numpy(np.ctypeslib.as_array(
+            self.mom_value, shape=(self.size, 1)))
+        mom_t = torch.clamp(mom_t / MOM_TARGET, 0, 1)
+
+        eval_t = score(eval_t, mom_t)
+
+        final_eval_t = eval_t * mom_t + (1 - mom_t) * score_t
 
         # Now we don't have to bother with the sparse pytorch tensors!
         # And no transpositions required too because we have control over the layout!
@@ -90,65 +89,89 @@ class SparseBatch(ctypes.Structure):
 
 SparseBatchPtr = ctypes.POINTER(SparseBatch)
 
-create_sparse_batch_stream = dll.create_sparse_batch_stream
-create_sparse_batch_stream.argtypes = [ctypes.c_char_p, ctypes.c_int]
-create_sparse_batch_stream.restype = ctypes.c_void_p
-
-fetch_next_batch = dll.fetch_next_batch
-fetch_next_batch.argtypes = [ctypes.c_void_p]
-fetch_next_batch.restype = SparseBatchPtr
-
-drop_sparse_batch_stream = dll.drop_sparse_batch_stream
-drop_sparse_batch_stream.argtypes = [ctypes.c_void_p]
-
-drop_sparse_batch = dll.drop_sparse_batch
-drop_sparse_batch.argtypes = [ctypes.c_void_p]
-
-
 class SparseBatchDataset(torch.utils.data.IterableDataset):
-    def __init__(self, filename, batch_size):
-        self.stream = create_sparse_batch_stream(filename, batch_size)
+    def __init__(self, dll_filename: str, filename:str, batch_size: int):
+        self.load_dll(dll_filename)
+        self.compute_approximate_size(filename, batch_size)
+
+        self.filename = filename.encode('utf-8')
+        self.batch_size = batch_size
+
+    def load_dll(self, dll_filename: str):
+        if not os.path.exists(dll_filename):
+            raise FileNotFoundError(f"Shared library {dll_filename} not found.")
+        dll = ctypes.cdll.LoadLibrary(dll_filename)
+
+        self.create_sparse_batch_stream = dll.create_sparse_batch_stream
+        self.create_sparse_batch_stream.argtypes = [ctypes.c_char_p, ctypes.c_int]
+        self.create_sparse_batch_stream.restype = ctypes.c_void_p
+
+        self.fetch_next_batch = dll.fetch_next_batch
+        self.fetch_next_batch.argtypes = [ctypes.c_void_p]
+        self.fetch_next_batch.restype = SparseBatchPtr
+
+        self.drop_sparse_batch_stream = dll.drop_sparse_batch_stream
+        self.drop_sparse_batch_stream.argtypes = [ctypes.c_void_p]
+
+        self.drop_sparse_batch = dll.drop_sparse_batch
+        self.drop_sparse_batch.argtypes = [ctypes.c_void_p]
+
+    def compute_approximate_size(self, filename: str, batch_size: int):
+        BYTES_PER_ENTRY = 2.5
+        file_size = Path(filename).stat().st_size
+        self.approx_num_batches = int(file_size // (batch_size * BYTES_PER_ENTRY))
+
+    def __len__(self):
+        return self.approx_num_batches
 
     def __iter__(self):
+        self.delete_stream()
+        self.stream = self.create_sparse_batch_stream(self.filename, self.batch_size)
         return self
 
     def __next__(self):
-        batch = fetch_next_batch(self.stream)
+        batch = self.fetch_next_batch(self.stream)
 
         if batch:
             tensors = batch.contents.get_tensors()
-            drop_sparse_batch(batch)
+            self.drop_sparse_batch(batch)
             return tensors
         else:
             raise StopIteration
 
     def __del__(self):
-        drop_sparse_batch_stream(self.stream)
+        self.delete_stream()
+
+    def delete_stream(self):
+        if hasattr(self, 'stream') and self.stream:
+            self.drop_sparse_batch_stream(self.stream)
 
 
-if __name__ == '__main__':
-    provider = SparseBatchDataset(b"../games/training_data.bin", 8192)
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description='Test SparseBatchDataset')
+    parser.add_argument('--dll-path', type=str, required=True,
+                        help='Path to the shared library (DLL/SO/DYLIB)')
+    parser.add_argument('--data-path', type=str, required=True,
+                        help='Path to the data file')
+    parser.add_argument('--batch-size', type=int, default=8192,
+                        help='Batch size for training (default: 8192)')
+    args = parser.parse_args()
 
-    start = time.time()
-    total = 0
-    for batch in provider:
-        total += 1
-        if total == 2500:
-            break
 
-    end = time.time()
+    dataset = SparseBatchDataset(args.dll_path, args.data_path, args.batch_size)
 
-    print('total', total)
-    print('time', end-start)
+    start_time = time.time()
+    batches_read = 0
 
-    # import torch
+    try:
+        for i, data in enumerate(dataset):
+            batches_read = i + 1
+    except KeyboardInterrupt:
+        print("Interrupted by user.")
 
-    # # LITTERALLY  COORDINATES
-    # features = [[0, 1], [0, 2], [0, 5], [1, 2]]
-
-    # i = torch.transpose(torch.tensor(features), 0, 1)
-    # v = torch.ones(len(features), dtype=torch.int64)
-    # k = torch.sparse_coo_tensor(i, v)
-
-    # print(k)
-    # print(k.to_dense())
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Read {batches_read} batches in {elapsed_time:.2f} seconds.")
+    print(f"Batches per second: {batches_read / elapsed_time:.2f}")
+        

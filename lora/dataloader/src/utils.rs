@@ -1,4 +1,4 @@
-use cozy_chess::Color;
+use cozy_chess::{Color, Piece};
 use features::{FEATURES_PER_SIDE, NUM_FEATURES};
 use games::binpack::{GameResult, TrainingEntry};
 
@@ -11,7 +11,7 @@ pub struct SparseBatch {
     pub num_active_their_features: i32,
 
     pub final_score: *mut f32,
-    pub ply: *mut i32,
+    pub mom_value: *mut i32,
     pub eval: *mut i32,
     pub our_feature_indices: *mut i32,
     pub their_feature_indices: *mut i32,
@@ -29,7 +29,16 @@ impl SparseBatch {
             }
         }).collect();
 
-        let ply: Vec<i32> = data.iter().map(|e| e.ply as i32).collect();
+        let mom_value: Vec<i32> = data.iter().map(|e| {
+            let board = &e.board;
+            let total = 
+                board.pieces(Piece::Queen).len() * 9 + 
+                board.pieces(Piece::Rook).len() * 5 + 
+                board.pieces(Piece::Bishop).len() * 3 + 
+                board.pieces(Piece::Knight).len() * 3 + 
+                board.pieces(Piece::Pawn).len() * 1;
+            total as i32
+        }).collect();
 
         let eval: Vec<i32> = data.iter().map(|e| e.eval.value()).collect();
 
@@ -76,7 +85,7 @@ impl SparseBatch {
             num_active_our_features: num_active_white_features as i32,
             num_active_their_features: num_active_black_features as i32,
             final_score: score.leak().as_mut_ptr(),
-            ply: ply.leak().as_mut_ptr(),
+            mom_value: mom_value.leak().as_mut_ptr(),
             eval: eval.leak().as_mut_ptr(),
             our_feature_indices: our_feature_indices.leak().as_mut_ptr(),
             their_feature_indices: their_feature_indices.leak().as_mut_ptr(),
@@ -87,7 +96,7 @@ impl SparseBatch {
 impl Drop for SparseBatch {
     fn drop(&mut self) {
         unsafe { 
-            let _ = Box::from_raw(self.ply);
+            let _ = Box::from_raw(self.mom_value);
             let _ = Box::from_raw(self.final_score);
             let _ = Box::from_raw(self.eval);
             let _ = Box::from_raw(self.our_feature_indices);
