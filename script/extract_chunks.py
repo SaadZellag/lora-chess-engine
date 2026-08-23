@@ -2,7 +2,7 @@ import argparse
 import struct
 
 
-def extract_chunks(input_file, num_chunks, output_file):
+def extract_chunks(input_file, num_chunks, output_file, skip_first_chunks):
     """
     Extract the first N chunks from a stockfish binpack file and write to output file.
     
@@ -14,17 +14,31 @@ def extract_chunks(input_file, num_chunks, output_file):
     with open(input_file, 'rb') as infile, open(output_file, 'wb') as outfile:
         chunks_extracted = 0
         
-        while chunks_extracted < num_chunks:
-            # Read magic number (4 bytes)
+        # Skip initial chunks if needed
+        for _ in range(skip_first_chunks):
             magic = infile.read(4)
             if not magic or len(magic) < 4:
-                print(f"Warning: End of file reached after {chunks_extracted} chunks")
+                print(f"Warning: End of file reached while skipping chunks")
+                return
+            if magic != b'BINP':
+                print(f"Error: Expected 'BINP' magic number, got {magic}")
+                return
+            chunk_size_bytes = infile.read(4)
+            if len(chunk_size_bytes) < 4:
+                print(f"Error: Could not read chunk size while skipping chunks")
+                return
+            chunk_size = struct.unpack('<I', chunk_size_bytes)[0]
+            infile.read(chunk_size)
+
+        while chunks_extracted < num_chunks:
+            magic = infile.read(4)
+            if not magic or len(magic) < 4:
+                print(f"Warning: End of file reached while extracting chunks")
                 break
-            
             if magic != b'BINP':
                 print(f"Error: Expected 'BINP' magic number, got {magic}")
                 break
-            
+
             # Read chunk size (next 4 bytes, little-endian)
             chunk_size_bytes = infile.read(4)
             if len(chunk_size_bytes) < 4:
@@ -66,6 +80,12 @@ def main():
         help='Number of chunks to extract'
     )
     parser.add_argument(
+        '--skip-first-chunks',
+        type=int,
+        default=0,
+        help='Number of initial chunks to skip'
+    )
+    parser.add_argument(
         '--output-file',
         required=True,
         help='Path to the output file'
@@ -74,7 +94,7 @@ def main():
     args = parser.parse_args()
     
     try:
-        extract_chunks(args.input_file, args.num_chunks, args.output_file)
+        extract_chunks(args.input_file, args.num_chunks, args.output_file, args.skip_first_chunks)
     except FileNotFoundError as e:
         print(f"Error: {e}")
         return 1
