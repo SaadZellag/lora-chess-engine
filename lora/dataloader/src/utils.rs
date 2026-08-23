@@ -1,6 +1,7 @@
 use cozy_chess::{Color, Piece};
 use features::{FEATURES_PER_SIDE, NUM_FEATURES};
 use games::binpack::{GameResult, TrainingEntry};
+use stockfish_binpack::{BPEntry, BPResult};
 
 
 #[derive(Debug)]
@@ -18,14 +19,14 @@ pub struct SparseBatch {
 }
 
 impl SparseBatch {
-    pub fn new(data: &[TrainingEntry]) -> Self {
+    pub fn new(data: &[BPEntry]) -> Self {
         let size = data.len();
 
         let score: Vec<f32> = data.iter().map(|e| {
-            match (e.board.side_to_move(), e.result) {
-                (Color::White, GameResult::WhiteWins) | (Color::Black, GameResult::BlackWins) => 1.0,
-                (Color::White, GameResult::BlackWins) | (Color::Black, GameResult::WhiteWins) => 0.0,
-                (_, GameResult::Draw) => 0.0,
+            match e.result {
+                BPResult::Win => 1.0,
+                BPResult::Loss => -1.0,
+                BPResult::Draw => 0.0,
             }
         }).collect();
 
@@ -40,7 +41,7 @@ impl SparseBatch {
             total as i32
         }).collect();
 
-        let eval: Vec<i32> = data.iter().map(|e| e.eval.value()).collect();
+        let eval: Vec<i32> = data.iter().map(|e| e.score as i32).collect();
 
         // dbg!(size);
         // dbg!(data);

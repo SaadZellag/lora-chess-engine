@@ -9,7 +9,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
 from torch.optim import Adam, SGD
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import OneCycleLR, ReduceLROnPlateau
 import torch.nn.functional as F
 import struct
 import sys
@@ -70,16 +70,22 @@ class NNUE(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = Adam(self.parameters(), lr=LR)
-        scheduler = ReduceLROnPlateau(
-            optimizer, mode='min', patience=3)
+        scheduler = OneCycleLR(
+            optimizer,
+            max_lr=1e-3,
+            total_steps=int(self.trainer.estimated_stepping_batches),
+            pct_start=0.05,  # 5% Warmup
+            div_factor=10.0,
+            final_div_factor=100.0
+        )
         return {
             "optimizer": optimizer,
             "lr_scheduler": scheduler,
             "monitor": "val_loss"
         }
 
-    def optimizer_step(self, *args, **kwargs):
-        super().optimizer_step(*args, **kwargs)
+    def on_before_zero_grad(self, *args, **kwargs):
+        super().on_before_zero_grad(*args, **kwargs)
 
         to_clip = [
             self.ft.weight,
@@ -88,10 +94,12 @@ class NNUE(pl.LightningModule):
             self.output.weight
         ]
 
-        for clip in to_clip:
-            p_data_fp32 = clip.data
-            p_data_fp32.clamp_(MIN, MAX)
-            clip.data.copy_(p_data_fp32)
+
+        with torch.no_grad():
+            for clip in to_clip:
+                p_data_fp32 = clip.data
+                p_data_fp32.clamp_(MIN, MAX)
+                clip.data.copy_(p_data_fp32)
 
     # def training_epoch_end(self, outputs):
     #     if self.current_epoch % 25 == 0:
@@ -167,11 +175,14 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=8192,
                         help='Batch size for training (default: 8192)')
     parser.add_argument('--num-workers', type=int, default=1,
-                        help='Number of workers for data loading (default: 24)')
+                        help='Number of workers for data loading (default: 1)')
     parser.add_argument('--epochs', type=int, default=50,
                         help='Number of epochs for training (default: 50)')
     parser.add_argument('--checkpoint', type=str, default=None,
                         help='Path to checkpoint for resuming training')
+    parser.add_argument('--device', type=str, default='cuda')
+    parser.add_argument('--matmul-precision', type=str, default=None,
+                        help='Matmul precision for training (default: None)')
     parser.add_argument('--dll-path', type=str)
     args, unknown = parser.parse_known_args()
 
@@ -184,7 +195,10 @@ if __name__ == '__main__':
     # val_dataloader = DataLoader(
     #     val_dataset, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
 
-    now = datetime.now().strftime("%Y%m%d%H%M%S")
+    if args.matmul_precision:
+        torch.set_float32_matmul_precision(args.matmul_precision)
+
+    now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
     checkpoint = ModelCheckpoint(
         save_top_k=1,
@@ -192,23 +206,39 @@ if __name__ == '__main__':
         filename=f'NNUE-2x{M}-{K}-{now}'
     )
 
-    tb_logger = TensorBoardLogger("tb_logs", name=f"NNUE-2x{M}-{K}")
+    tb_logger = TensorBoardLogger("tb_logs", name=f"NNUE-2x{M}-{K}", version=now)
+
+    # pytorch_profiler = PyTorchProfiler(
+    #     dirpath="tb_logs/profiler",
+    #     filename="perf_logs",
+    #     record_shapes=True,
+    #     profile_memory=True,
+    #     trace_cuda=True
+    # )
 
     trainer = pl.Trainer(callbacks=checkpoint,
                          logger=tb_logger,
                          log_every_n_steps=1,
                          accelerator='gpu', devices=1,
-                         max_epochs=args.epochs
+                         max_epochs=args.epochs,
+                        #  profiler="advanced"
                          )
 
     if args.checkpoint:
         nnue = load_nnue(args.checkpoint)
     else:
         nnue = NNUE()
+    nnue = nnue.to(args.device)
     # nnue = NNUE()
+    # try:
+    #     nnue = torch.compile(nnue)
+    # except Exception as e:
+    #     print(f"Warning: torch.compile failed with error: {e}. Proceeding without compilation.")
 
-    train_dataloader = SparseBatchDataset(args.dll_path, args.train_input, args.batch_size)
-    val_dataloader = SparseBatchDataset(args.dll_path, args.test_input, args.batch_size)
+    train_dataset = SparseBatchDataset(args.dll_path, args.train_input, args.batch_size)
+    val_dataset = SparseBatchDataset(args.dll_path, args.test_input, args.batch_size)
+    train_dataloader = DataLoader(train_dataset, batch_size=None, num_workers=0, pin_memory=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=None, num_workers=0, pin_memory=True)
     trainer.fit(nnue, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
 # elif sys.argv[1] == 'convert':
