@@ -11,6 +11,73 @@ from torch.utils.data import Dataset
 from consts import *
 from pathlib import Path
 
+import torch
+
+torch.sparse.check_sparse_tensor_invariants.disable()
+
+def validate_sparse_coo_inputs(
+    indices: torch.Tensor,
+    values: torch.Tensor,
+    size: tuple[int, ...],
+    is_coalesced: bool = False
+) -> None:
+    """
+    Validates inputs before calling torch.sparse_coo_tensor.
+    Raises ValueError or TypeError if constraints are violated.
+    """
+    # 1. Type Checks
+    if not isinstance(indices, torch.Tensor):
+        raise TypeError(f"`indices` must be a torch.Tensor, got {type(indices).__name__}")
+    if not isinstance(values, torch.Tensor):
+        raise TypeError(f"`values` must be a torch.Tensor, got {type(values).__name__}")
+    if not isinstance(size, (tuple, list)):
+        raise TypeError(f"`size` must be a tuple or list of ints, got {type(size).__name__}")
+
+    # 2. Indices Tensor Checks
+    if indices.ndim != 2:
+        raise ValueError(f"`indices` must be 2D of shape (sparse_dims, nnz), got shape {tuple(indices.shape)}")
+    if indices.dtype not in (torch.int64, torch.int32):
+        raise ValueError(f"`indices` dtype must be int64 or int32, got {indices.dtype}")
+
+    sparse_dims, nnz = indices.shape
+
+    # 3. Size Checks
+    if len(size) < sparse_dims:
+        raise ValueError(f"Size tuple length ({len(size)}) cannot be smaller than sparse dimensions ({sparse_dims})")
+    if any(s < 0 for s in size):
+        raise ValueError(f"All dimensions in `size` must be non-negative, got {size}")
+
+    # 4. Values Tensor Alignment
+    # values shape must start with nnz, followed by dense dimensions if hybrid sparse tensor
+    expected_values_shape = (nnz,) + tuple(size[sparse_dims:])
+    if values.shape != expected_values_shape:
+        raise ValueError(f"`values` shape mismatch. Expected {expected_values_shape}, got {tuple(values.shape)}")
+
+    # 5. Out-of-Bounds Index Checks
+    if nnz > 0:
+        if torch.any(indices < 0):
+            raise ValueError("Found negative values in `indices`")
+        
+        # Check boundary per sparse dimension
+        size_tensor = torch.tensor(size[:sparse_dims], dtype=indices.dtype, device=indices.device).unsqueeze(1)
+        oob_mask = indices >= size_tensor
+        if torch.any(oob_mask):
+            bad_dim, bad_idx = torch.where(oob_mask)
+            dim_val = bad_dim[0].item()
+            invalid_val = indices[bad_dim[0], bad_idx[0]].item()
+            raise ValueError(
+                f"Index out of bounds in dimension {dim_val}: "
+                f"value {invalid_val} >= dim max size {size[dim_val]}"
+            )
+
+    # 6. Optional Coalescence Check (Duplicate Indices)
+    if is_coalesced and nnz > 1:
+        # Transpose to shape (nnz, sparse_dims) for row comparison
+        idx_t = indices.T
+        sorted_idx, _ = torch.sort(idx_t, dim=0)
+        duplicates = (idx_t[1:] == idx_t[:-1]).all(dim=1)
+        if torch.any(duplicates):
+            raise ValueError("`is_coalesced=True` was passed, but duplicate indices were detected.")
 
 
 class SparseBatch(ctypes.Structure):
@@ -53,10 +120,25 @@ class SparseBatch(ctypes.Structure):
         their_features_indices_t = torch.transpose(torch.from_numpy(
             np.ctypeslib.as_array(self.their_feature_indices, shape=(self.num_active_their_features, 2))), 0, 1)
 
+
         # The values are all ones, so we can create these tensors in place easly.
         # No need to go through a copy.
         our_features_values_t = torch.ones(self.num_active_our_features)
         their_features_values_t = torch.ones(self.num_active_their_features)
+
+        # validate_sparse_coo_inputs(
+        #     indices=our_features_indices_t,
+        #     values=our_features_values_t,
+        #     size=(self.size, NUM_FEATURES),
+        #     is_coalesced=True
+        # )
+
+        # validate_sparse_coo_inputs(
+        #     indices=their_features_indices_t,
+        #     values=their_features_values_t,
+        #     size=(self.size, NUM_FEATURES),
+        #     is_coalesced=True
+        # )
 
         # Now the magic. We construct a sparse tensor by giving the indices of
         # non-zero values (active feature indices) and the values itself (all ones!).

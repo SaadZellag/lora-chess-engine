@@ -12,7 +12,7 @@ use features::NUM_FEATURES;
 
 use crate::eval::nnue::layer::{FeatureLayer, Layer};
 
-pub static EVALUATOR: NNUE = unsafe { MaybeUninit::zeroed().assume_init() }; // TODO: Initialize this properly
+include!(env!("NNUE_PATH"));
 
 #[repr(align(64))]
 pub struct NNUE {

@@ -37,7 +37,8 @@ impl OrderedMoveGen {
     pub fn with_mask(board: &Board, mask: BitBoard) -> Self {
         let mut all_moves = ArrayVec::new();
 
-        board.generate_moves_for(mask, |moves| {
+        board.generate_moves(|mut moves| {
+            moves.to = moves.to & mask;
             for _mv in moves {
                 all_moves.push(_mv);
             }

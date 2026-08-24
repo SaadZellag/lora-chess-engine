@@ -1,3 +1,5 @@
+import argparse
+import json
 import math
 import matplotlib.pyplot as plt
 import sys
@@ -8,9 +10,15 @@ from nnue_dataset import SparseBatchDataset
 import torch
 
 
-
 def to_np(tensor):
     return tensor.cpu().detach().to_dense().numpy()
+
+
+def tensor_to_list(tensor, scale, type=np.int32):
+    tensor = tensor.cpu().detach().numpy()
+    tensor = np.round(tensor * scale)
+    tensor = tensor.astype(type, order='C')
+    return tensor.tolist()
 
 
 class intNNUE():
@@ -60,72 +68,125 @@ class intNNUE():
         return output / 8
 
 
+def output_to_rust(nnue: NNUE, output_file):
+
+    INACTIVE_THRESHOLD = 16
+
+    feature_weights = tensor_to_list(nnue.ft.weight.transpose(0, 1), FEATURE_SCALE, np.int16)
+    feature_bias = tensor_to_list(nnue.ft.bias, FEATURE_SCALE, np.int16)
+
+    number_of_feature_weights = len(feature_weights) * len(feature_weights[0])
+    number_of_feature_inactive = 0
+    # Count the number of 0s to know how "fully trained the NN is"
+    for row in feature_weights:
+        for value in row:
+            if abs(value) < INACTIVE_THRESHOLD:
+                number_of_feature_inactive += 1
+
+    percent_feature_weights_zero = number_of_feature_inactive / number_of_feature_weights * 100
+
+    print(f"Feature weights: {number_of_feature_weights} total, {number_of_feature_inactive} inactive ({percent_feature_weights_zero:.2f}%)")
+
+    feature_weights_flat = [v for row in feature_weights for v in row]
+    print(f"Mean: {np.mean(feature_weights_flat):.4f}, Median: {np.median(feature_weights_flat):.4f}, Std Dev: {np.std(feature_weights_flat):.4f}")
+    print(f'Max: {np.max(feature_weights_flat)}, Min: {np.min(feature_weights_flat)}')
+
+    with open(output_file, 'w') as f:
+        f.write(f'''
+            pub static EVALUATOR: NNUE = NNUE {{
+                ft: FeatureLayer {{
+                    weights: {feature_weights},
+                    bias: {feature_bias}
+                }},
+                layer_1: Layer {{
+                    weights: {tensor_to_list(nnue.l1.weight, WEIGHT_SCALE, np.int8)},
+                    bias: {tensor_to_list(nnue.l1.bias, BIAS_SCALE, np.int32)}
+                }},
+                output: Layer {{
+                    weights: {tensor_to_list(nnue.output.weight, WEIGHT_SCALE, np.int8)},
+                    bias: {tensor_to_list(nnue.output.bias, BIAS_SCALE, np.int32)}
+                }}
+            }};
+        ''')
+        
+
+
 if __name__ == '__main__':
-    dataset = SparseBatchDataset(b'../games/val_training_data.bin', 8192)
-    nnue = load_nnue(sys.argv[1])
-    intnnue = intNNUE(nnue)
+    parser = argparse.ArgumentParser(description='NNUE Export')
+    parser.add_argument('--input', type=str, required=True,
+                        help='Path to the input NNUE model checkpoint')
+    parser.add_argument('--output', type=str, required=True,
+                        help='Path to the output JSON file')
+    args = parser.parse_args()
 
-    # print('weights', intnnue.ft_weight)
-    # print('bias', intnnue.ft_bias)
-    # print('Scale:', SCALING_FACTOR)
+    nnue = load_nnue(args.input)
+    output_to_rust(nnue, args.output)
 
-    data_x = []
-    data_y = []
+    # dataset = SparseBatchDataset(b'../games/val_training_data.bin', 8192)
+    # nnue = load_nnue(sys.argv[1])
+    # intnnue = intNNUE(nnue)
 
-    total_batches = 100000
+    # # print('weights', intnnue.ft_weight)
+    # # print('bias', intnnue.ft_bias)
+    # # print('Scale:', SCALING_FACTOR)
 
-    try:
-        for (i, data) in enumerate(dataset):
-            our, their, y_batch = data
+    # data_x = []
+    # data_y = []
 
-            # y_hat_batch = nnue.forward(our, their, dim=1, debug=False)
-            y_int_hat_batch = intnnue.forward(our, their)[0]
+    # total_batches = 100000
 
-            DELTA = 1e-20
-            y_batch = torch.clamp(y_batch, DELTA, 1-DELTA)
-            y_batch = torch.log(y_batch/(1-y_batch)) * \
-                WEIGHT_SCALE * ACTIVATION_RANGE / 8
+    # try:
+    #     for (i, data) in enumerate(dataset):
+    #         our, their, y_batch = data
 
-            data_x += y_int_hat_batch.tolist()
-            # data_x += torch.sigmoid(y_hat_batch).reshape(-1).tolist()
-            data_y += y_batch.reshape(-1).tolist()
+    #         # y_hat_batch = nnue.forward(our, their, dim=1, debug=False)
+    #         y_int_hat_batch = intnnue.forward(our, their)[0]
 
-            # for (j, (y, y_int_hat)) in enumerate(zip(y_batch, y_int_hat_batch)):
-            # if i == 0:
-            #     print(y, sigmoid(y_hat))
-            #     print(y_hat, y_int_hat)
-            #     # exit()
+    #         DELTA = 1e-20
+    #         y_batch = torch.clamp(y_batch, DELTA, 1-DELTA)
+    #         y_batch = torch.log(y_batch/(1-y_batch)) * \
+    #             WEIGHT_SCALE * ACTIVATION_RANGE / 8
 
-            # data_x.append(sigmoid(y_hat))
-            # data_y.append(y)
+    #         data_x += y_int_hat_batch.tolist()
+    #         # data_x += torch.sigmoid(y_hat_batch).reshape(-1).tolist()
+    #         data_y += y_batch.reshape(-1).tolist()
 
-            # print(y_int_hat_batch)
-            # print(y_int_hat)
-            # print(y)
-            # data_x.append(y_int_hat.item())
-            # data_y.append(y.item())
+    #         # for (j, (y, y_int_hat)) in enumerate(zip(y_batch, y_int_hat_batch)):
+    #         # if i == 0:
+    #         #     print(y, sigmoid(y_hat))
+    #         #     print(y_hat, y_int_hat)
+    #         #     # exit()
 
-            # print('correct', y)
-            # print('True', nnue.forward(our, their).item())
-            # print('Int', intnnue.forward(our, their)[0])
+    #         # data_x.append(sigmoid(y_hat))
+    #         # data_y.append(y)
 
-            z = np.polyfit(data_x, data_y, 1)
-            p = np.poly1d(z)
-            print(i, z, " " * 10, end='\r')
+    #         # print(y_int_hat_batch)
+    #         # print(y_int_hat)
+    #         # print(y)
+    #         # data_x.append(y_int_hat.item())
+    #         # data_y.append(y.item())
 
-            if i > total_batches:
-                break
-    except KeyboardInterrupt:
-        pass
+    #         # print('correct', y)
+    #         # print('True', nnue.forward(our, their).item())
+    #         # print('Int', intnnue.forward(our, their)[0])
 
-    z = np.polyfit(data_x, data_y, 1)
-    p = np.poly1d(z)
+    #         z = np.polyfit(data_x, data_y, 1)
+    #         p = np.poly1d(z)
+    #         print(i, z, " " * 10, end='\r')
 
-    R = np.corrcoef(data_x, data_y)
-    print('\nR =', R)
+    #         if i > total_batches:
+    #             break
+    # except KeyboardInterrupt:
+    #     pass
 
-    print(p)
+    # z = np.polyfit(data_x, data_y, 1)
+    # p = np.poly1d(z)
 
-    plt.plot(data_x, data_y, 'ro')
-    plt.plot(data_x, p(data_x))
-    plt.show()
+    # R = np.corrcoef(data_x, data_y)
+    # print('\nR =', R)
+
+    # print(p)
+
+    # plt.plot(data_x, data_y, 'ro')
+    # plt.plot(data_x, p(data_x))
+    # plt.show()

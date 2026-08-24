@@ -25,8 +25,8 @@ impl SparseBatch {
         let score: Vec<f32> = data.iter().map(|e| {
             match e.result {
                 BPResult::Win => 1.0,
-                BPResult::Loss => -1.0,
-                BPResult::Draw => 0.0,
+                BPResult::Draw => 0.5,
+                BPResult::Loss => 0.0,
             }
         }).collect();
 

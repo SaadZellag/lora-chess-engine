@@ -80,7 +80,10 @@ class NNUE(pl.LightningModule):
         )
         return {
             "optimizer": optimizer,
-            "lr_scheduler": scheduler,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step"
+            },
             "monitor": "val_loss"
         }
 
@@ -88,7 +91,7 @@ class NNUE(pl.LightningModule):
         super().on_before_zero_grad(*args, **kwargs)
 
         to_clip = [
-            self.ft.weight,
+            # self.ft.weight,
             self.l1.weight,
             # self.l2.weight,
             self.output.weight
@@ -114,40 +117,6 @@ class NNUE(pl.LightningModule):
     #         print(f"bench: {out}")
 
     #     # self.log("nodes", nodes, on_step=False, on_epoch=True)
-
-
-
-def nnue_to_rust(nnue: NNUE):
-
-    # Writing NNUE properties to file
-    with open('../lora/engine/src/eval/nnue/nnue_conf.rs', 'w') as f:
-        f.write(f"pub const L1: usize = {M}; // Also M\n")
-        f.write(f"pub const L2: usize = {K}; // Also K\n")
-
-    def tensor_to_list(tensor, scale, type):
-        tensor = tensor.cpu().detach().numpy()
-        tensor = np.round(tensor * scale)
-        tensor = tensor.astype(type, order='C')
-        return tensor.tolist()
-
-    import json
-    with open('../lora/engine/src/eval/nnue/model.json', 'w') as f:
-        BIAS_SCALE = ACTIVATION_RANGE * WEIGHT_SCALE
-        model_data = {
-            "ft": {
-                "weights": tensor_to_list(nnue.ft.weight.transpose(0, 1), ACTIVATION_RANGE, np.int16),
-                "bias": tensor_to_list(nnue.ft.bias, ACTIVATION_RANGE, np.int16)
-            },
-            "layer_1": {
-                "weights": tensor_to_list(nnue.l1.weight, WEIGHT_SCALE, np.int8),
-                "bias": tensor_to_list(nnue.l1.bias, BIAS_SCALE, np.int32)
-            },
-            "output": {
-                "weights": tensor_to_list(nnue.output.weight, WEIGHT_SCALE, np.int8),
-                "bias": tensor_to_list(nnue.output.bias, BIAS_SCALE, np.int32)
-            }
-        }
-        json.dump(model_data, f)
 
 
 def load_nnue(path):
@@ -224,10 +193,10 @@ if __name__ == '__main__':
                         #  profiler="advanced"
                          )
 
-    if args.checkpoint:
-        nnue = load_nnue(args.checkpoint)
-    else:
-        nnue = NNUE()
+    # if args.checkpoint:
+    #     nnue = load_nnue(args.checkpoint)
+    # else:
+    nnue = NNUE()
     nnue = nnue.to(args.device)
     # nnue = NNUE()
     # try:
@@ -239,7 +208,8 @@ if __name__ == '__main__':
     val_dataset = SparseBatchDataset(args.dll_path, args.test_input, args.batch_size)
     train_dataloader = DataLoader(train_dataset, batch_size=None, num_workers=0, pin_memory=True)
     val_dataloader = DataLoader(val_dataset, batch_size=None, num_workers=0, pin_memory=True)
-    trainer.fit(nnue, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
+
+    trainer.fit(nnue, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader, ckpt_path=args.checkpoint)
 
 # elif sys.argv[1] == 'convert':
 #     nnue = load_nnue(sys.argv[2])
