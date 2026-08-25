@@ -81,6 +81,9 @@ impl SparseBatch {
         let num_active_white_features = our_index / 2; // Indices contain batch index and value
         let num_active_black_features = their_index / 2;
 
+        // println!("Our features {:?}", our_feature_indices);
+        // println!("Their features {:?}", their_feature_indices);
+
         Self {
             size: size as i32,
             num_active_our_features: num_active_white_features as i32,

@@ -28,15 +28,14 @@ class intNNUE():
             tensor = np.round(tensor * scale).astype(np.int32)
             return tensor
 
-        self.ft_weight = get_tensor(nnue.ft.weight, ACTIVATION_RANGE)
-        self.ft_bias = get_tensor(nnue.ft.bias,   ACTIVATION_RANGE)
+        self.ft_weight = get_tensor(nnue.ft.weight, FEATURE_SCALE)
+        self.ft_bias = get_tensor(nnue.ft.bias,   FEATURE_BIAS_SCALE)
         self.l1_weight = get_tensor(nnue.l1.weight, WEIGHT_SCALE)
         self.l1_bias = get_tensor(nnue.l1.bias,   BIAS_SCALE)
         # self.l2_weight = get_tensor(nnue.l2.weight, WEIGHT_SCALE)
         # self.l2_bias = get_tensor(nnue.l2.bias,   BIAS_SCALE)
         self.output_weight = get_tensor(nnue.output.weight, WEIGHT_SCALE)
-        self.output_bias = get_tensor(
-            nnue.output.bias, BIAS_SCALE)
+        self.output_bias = get_tensor(nnue.output.bias, BIAS_SCALE)
 
         self.ft_bias = self.ft_bias.reshape(-1, 1)
         self.l1_bias = self.l1_bias.reshape(-1, 1)
@@ -54,7 +53,7 @@ class intNNUE():
 
         # print('int acc:', acc)
 
-        l1_x = np.clip(acc, 0, 127)
+        l1_x = np.clip(acc // FEATURE_CRELU_DOWNSCALE, 0, 127)
         l1 = np.dot(self.l1_weight, l1_x) + self.l1_bias
 
         # l2_x = np.clip(l1 // WEIGHT_SCALE, 0, 127)
@@ -62,7 +61,7 @@ class intNNUE():
         # print('int l2_x:', l2_x)
         # l2 = np.dot(self.l2_weight, l2_x) + self.l2_bias
 
-        output_x = np.clip(l1 // WEIGHT_SCALE, 0, 127)
+        output_x = np.clip(l1 // REGULAR_CRELU_DOWNSCALE, 0, 127)
         output = np.dot(self.output_weight, output_x) + self.output_bias
 
         return output / 8
@@ -73,7 +72,7 @@ def output_to_rust(nnue: NNUE, output_file):
     INACTIVE_THRESHOLD = 16
 
     feature_weights = tensor_to_list(nnue.ft.weight.transpose(0, 1), FEATURE_SCALE, np.int16)
-    feature_bias = tensor_to_list(nnue.ft.bias, FEATURE_SCALE, np.int16)
+    feature_bias = tensor_to_list(nnue.ft.bias, FEATURE_BIAS_SCALE, np.int16)
 
     number_of_feature_weights = len(feature_weights) * len(feature_weights[0])
     number_of_feature_inactive = 0

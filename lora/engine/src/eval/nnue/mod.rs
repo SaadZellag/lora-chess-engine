@@ -2,6 +2,7 @@ mod activations;
 mod impls;
 mod layer;
 mod vectors;
+mod parse;
 pub mod nnue_conf;
 
 // https://github.com/glinscott/nnue-pytorch/blob/master/docs/nnue.md

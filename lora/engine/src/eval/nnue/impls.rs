@@ -43,7 +43,7 @@ impl NNUE {
             input[L1 + i] = acc[!stm][i].into();
         }
 
-        let layer_1_out = self.layer_1.activate(&input.crelu(1));
+        let layer_1_out = self.layer_1.activate(&input.crelu(2));
         // let layer_2_out = self.layer_2.activate(&layer_1_out.crelu(64));
         let output = self.output.activate(&layer_1_out.crelu(64));
 

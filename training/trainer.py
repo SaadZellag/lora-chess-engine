@@ -30,6 +30,8 @@ class NNUE(pl.LightningModule):
         # self.l2 = nn.Linear(K, K)
         self.output = nn.Linear(K, 1)
 
+        self.previous_epoch = 0
+
     def forward(self, our_features, their_features, dim=1, debug=False):
         ours = self.ft(our_features)
         theirs = self.ft(their_features)
@@ -51,9 +53,16 @@ class NNUE(pl.LightningModule):
 
     def training_step(self, batch, _):
         our_features, their_features, y = batch
-        y_hat = torch.sigmoid(
-            self(our_features, their_features))
+        y_hat = torch.sigmoid(self(our_features, their_features))
         loss = F.mse_loss(y_hat, y)
+
+        if self.current_epoch != self.previous_epoch:
+            print("our_features:", our_features)
+            print("their_features:", their_features)
+            print("y:", y)
+            print("y_hat:", y_hat)
+            print("loss:", loss)
+            self.previous_epoch = self.current_epoch
 
         self.log('loss', loss, on_step=False, on_epoch=True)
 
@@ -66,7 +75,9 @@ class NNUE(pl.LightningModule):
 
         self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
 
+
         return loss
+
 
     def configure_optimizers(self):
         optimizer = Adam(self.parameters(), lr=LR)
@@ -90,6 +101,7 @@ class NNUE(pl.LightningModule):
     def on_before_zero_grad(self, *args, **kwargs):
         super().on_before_zero_grad(*args, **kwargs)
 
+
         to_clip = [
             # self.ft.weight,
             self.l1.weight,
@@ -101,8 +113,24 @@ class NNUE(pl.LightningModule):
         with torch.no_grad():
             for clip in to_clip:
                 p_data_fp32 = clip.data
-                p_data_fp32.clamp_(MIN, MAX)
+                p_data_fp32.clamp_(MIN_WEIGHT, MAX_WEIGHT)
                 clip.data.copy_(p_data_fp32)
+
+    def on_train_epoch_end(self):
+        # self.logger.experiment points to your TensorBoard SummaryWriter
+        tb_writer = self.logger.experiment
+
+        for name, param in self.named_parameters():
+            # Log weight distribution
+            tb_writer.add_histogram(
+                f"weights/{name}", param.data, self.current_epoch
+            )
+
+            # Log gradient distribution (if computed)
+            if param.grad is not None:
+                tb_writer.add_histogram(
+                    f"gradients/{name}", param.grad, self.current_epoch
+                )
 
     # def training_epoch_end(self, outputs):
     #     if self.current_epoch % 25 == 0:

@@ -8,3 +8,4 @@ arrayvec = "0.7.8"
 cozy-chess = "0.3.4"
 features = {path = "../features"}
 common = { path = "../common" }
+bytemuck = "1.25.2"

@@ -5,6 +5,10 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[[bin]]
+name = "debug_binpack"
+path = "src/debug_binpack.rs"
+
 [dependencies]
 engine = {path = "../engine"}
 features = {path = "../features"}

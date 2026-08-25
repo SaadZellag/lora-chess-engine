@@ -1,4 +1,5 @@
 mod conf;
+mod virtual_features;
 
 pub use conf::*;
 use cozy_chess::{Board, Color, Piece, Square};
@@ -38,6 +39,8 @@ pub fn features(board: &Board) -> impl Iterator<Item = (usize, usize)> + '_ {
 
             (white_index, black_index)
         })
+        .chain(virtual_features::virtual_features_1(&board))
+        .chain(virtual_features::virtual_features_2(&board))
 }
 
 
@@ -45,7 +48,7 @@ pub fn features(board: &Board) -> impl Iterator<Item = (usize, usize)> + '_ {
 mod tests {
     use cozy_chess::{Color, Square};
 
-use crate::{HALFKP_PIECES, NUM_FEATURES, white_feature_index, black_feature_index};
+use crate::{HALFKP_PIECES, NUM_FEATURES, black_feature_index, virtual_features, white_feature_index};
 
     
 
@@ -62,6 +65,17 @@ use crate::{HALFKP_PIECES, NUM_FEATURES, white_feature_index, black_feature_inde
                         white_result[index] += 1;
                         let index = black_feature_index(king_sq, square, piece, color);
                         black_result[index] += 1;
+
+                        // Virtual features duplicate
+                        let index = virtual_features::white_feature_index_virt1(piece, color, square);
+                        white_result[index] = 1;
+                        let index = virtual_features::black_feature_index_virt1(piece, color, square);
+                        black_result[index] = 1;
+
+                        let index = virtual_features::white_feature_index_virt2(piece, color, king_sq);
+                        white_result[index] = 1;
+                        let index = virtual_features::black_feature_index_virt2(piece, color, king_sq);
+                        black_result[index] = 1;
                     }
                 }
             }

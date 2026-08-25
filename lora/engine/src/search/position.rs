@@ -63,6 +63,19 @@ impl Position {
             GameStatus::Won => return Eval::MatedIn(self.ply.into()),
         };
 
-        EVALUATOR.eval(&self.acc, self.board.side_to_move())
+        let result = EVALUATOR.eval(&self.acc, self.board.side_to_move());
+
+        let features = features::features(&self.board)
+            .map(|(white, black)| if self.board.side_to_move() == cozy_chess::Color::White {
+                (white, black)
+            } else {
+                (black, white)
+            })
+            .collect::<Vec<_>>();
+
+
+
+        // eprintln!("Board: {}, Eval: {:?}, Features: {:?}", self.board, result, features);
+        result
     }
 }

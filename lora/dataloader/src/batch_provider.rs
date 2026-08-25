@@ -54,6 +54,7 @@ impl Iterator for SparseBatchStream {
         // let entries = self.reader.get_next_entries(self.batch_size).ok()?;
         let entries = self.iterator.by_ref().take(self.batch_size).collect::<Vec<_>>();
 
-        Some(SparseBatch::new(&entries))
+
+        (!entries.is_empty()).then(|| SparseBatch::new(&entries))
     }
 }

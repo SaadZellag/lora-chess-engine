@@ -450,6 +450,7 @@ name = "engine"
 version = "0.1.0"
 dependencies = [
  "arrayvec",
+ "bytemuck",
  "common",
  "cozy-chess",
  "features",

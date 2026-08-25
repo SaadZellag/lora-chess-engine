@@ -9,7 +9,14 @@ pub struct Layer<const INPUT: usize, const OUTPUT: usize> {
     pub bias: [i32; OUTPUT],
 }
 
+
 impl<const INPUT: usize, const OUTPUT: usize> Layer<INPUT, OUTPUT> {
+    pub const fn new() -> Self {
+        Self {
+            weights: [[0; INPUT]; OUTPUT],
+            bias: [0; OUTPUT],
+        }
+    }
     pub fn activate(&self, input: &[i8; INPUT]) -> [i32; OUTPUT] {
         let mut result = [0; OUTPUT];
         for i in 0..OUTPUT {
@@ -24,4 +31,14 @@ impl<const INPUT: usize, const OUTPUT: usize> Layer<INPUT, OUTPUT> {
 pub struct FeatureLayer<const INPUT: usize, const OUTPUT: usize> {
     pub weights: [[i16; OUTPUT]; INPUT],
     pub bias: [i16; OUTPUT],
+}
+
+
+impl<const INPUT: usize, const OUTPUT: usize> FeatureLayer<INPUT, OUTPUT> {
+    pub const fn new() -> Self {
+        Self {
+            weights: [[0; OUTPUT]; INPUT],
+            bias: [0; OUTPUT],
+        }
+    }
 }
