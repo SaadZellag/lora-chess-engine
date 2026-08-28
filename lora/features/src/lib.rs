@@ -39,8 +39,8 @@ pub fn features(board: &Board) -> impl Iterator<Item = (usize, usize)> + '_ {
 
             (white_index, black_index)
         })
-        .chain(virtual_features::virtual_features_1(&board))
-        .chain(virtual_features::virtual_features_2(&board))
+        // .chain(virtual_features::virtual_features_1(&board))
+        // .chain(virtual_features::virtual_features_2(&board))
 }
 
 

@@ -56,13 +56,13 @@ class NNUE(pl.LightningModule):
         y_hat = torch.sigmoid(self(our_features, their_features))
         loss = F.mse_loss(y_hat, y)
 
-        if self.current_epoch != self.previous_epoch:
-            print("our_features:", our_features)
-            print("their_features:", their_features)
-            print("y:", y)
-            print("y_hat:", y_hat)
-            print("loss:", loss)
-            self.previous_epoch = self.current_epoch
+        # if self.current_epoch != self.previous_epoch:
+        #     print("our_features:", our_features)
+        #     print("their_features:", their_features)
+        #     print("y:", y)
+        #     print("y_hat:", y_hat)
+        #     print("loss:", loss)
+        #     self.previous_epoch = self.current_epoch
 
         self.log('loss', loss, on_step=False, on_epoch=True)
 
@@ -81,25 +81,25 @@ class NNUE(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = Adam(self.parameters(), lr=LR)
-        scheduler = OneCycleLR(
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer,
-            max_lr=1e-3,
-            total_steps=int(self.trainer.estimated_stepping_batches),
-            pct_start=0.05,  # 5% Warmup
-            div_factor=10.0,
-            final_div_factor=100.0
+            mode="min",
+            factor=0.5,      # Cut LR in half when plateauing
+            patience=3,       # Wait 3 validation checks before dropping
+            min_lr=1e-6       # Keep a floor so training never freezes entirely
         )
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "interval": "step"
+                "interval": "epoch",
+                "monitor": "val_loss",
             },
             "monitor": "val_loss"
         }
 
-    def on_before_zero_grad(self, *args, **kwargs):
-        super().on_before_zero_grad(*args, **kwargs)
+    def on_train_batch_end(self, *args, **kwargs):
+        super().on_train_batch_end(*args, **kwargs)
 
 
         to_clip = [
@@ -181,6 +181,8 @@ if __name__ == '__main__':
     parser.add_argument('--matmul-precision', type=str, default=None,
                         help='Matmul precision for training (default: None)')
     parser.add_argument('--dll-path', type=str)
+    parser.add_argument('--step-size', type=int, default=1,
+                        help='Step size for the dataset (default: 1)')
     args, unknown = parser.parse_known_args()
 
 
@@ -232,10 +234,10 @@ if __name__ == '__main__':
     # except Exception as e:
     #     print(f"Warning: torch.compile failed with error: {e}. Proceeding without compilation.")
 
-    train_dataset = SparseBatchDataset(args.dll_path, args.train_input, args.batch_size)
-    val_dataset = SparseBatchDataset(args.dll_path, args.test_input, args.batch_size)
-    train_dataloader = DataLoader(train_dataset, batch_size=None, num_workers=0, pin_memory=True)
-    val_dataloader = DataLoader(val_dataset, batch_size=None, num_workers=0, pin_memory=True)
+    train_dataset = SparseBatchDataset(args.dll_path, args.train_input, args.batch_size, args.num_workers, args.step_size)
+    val_dataset = SparseBatchDataset(args.dll_path, args.test_input, args.batch_size, args.num_workers, args.step_size)
+    train_dataloader = DataLoader(train_dataset, batch_size=None, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=None, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
 
     trainer.fit(nnue, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader, ckpt_path=args.checkpoint)
 
